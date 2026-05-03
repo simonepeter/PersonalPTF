@@ -1,5 +1,5 @@
 // ─── CONFIG ──────────────────────────────────────────────
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxTPblW_RCgHALEkuvNUW6e659vpHRIBxrDTmLekf-EC_GIBeuOlb6eIrbv925b1AonYQ/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwokJEIFatJ0Zz_T0iBrvgav4hegErxZ2WZQOB3sITO-J9i_ZL1NQ4WmGvPIXrEeTJnUg/exec';
 
 // ─── COSTANTI COLORI ─────────────────────────────────────
 const AC_COLOR = { ETF:'#3b82f6', Azioni:'#8b5cf6', Crypto:'#f59e0b', Cash:'#10b981', Fondi:'#06b6d4' };
