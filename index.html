@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="PersonalPTF">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="theme-color" content="#080c14">
+  <title>PersonalPTF</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+
+  <!-- TOP BAR -->
+  <div id="topbar">
+    <div class="logo">
+      <div class="logo-mark">P</div>
+      <span class="logo-name">PersonalPTF</span>
+      <span class="live-badge" id="live-badge">LIVE</span>
+    </div>
+    <div class="topbar-right">
+      <button class="icon-btn" onclick="openForm()" title="Nuova operazione">+</button>
+      <button class="icon-btn refresh-btn" onclick="loadData()" title="Aggiorna">↻</button>
+      <span class="update-time" id="update-time">--</span>
+    </div>
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div id="content">
+    <div class="loading" id="loading">
+      <div class="spinner"></div>
+      <span id="loading-text">Caricamento dati...</span>
+    </div>
+    <div id="page-content" style="display:none"></div>
+  </div>
+
+  <!-- BOTTOM NAV -->
+  <nav id="navbar">
+    <button class="nav-item active" onclick="setTab('overview')" id="tab-overview">
+      <span class="nav-icon">◈</span>
+      <span class="nav-label">Home</span>
+    </button>
+    <button class="nav-item" onclick="setTab('performance')" id="tab-performance">
+      <span class="nav-icon">↗</span>
+      <span class="nav-label">Perf</span>
+    </button>
+    <button class="nav-item" onclick="setTab('posizioni')" id="tab-posizioni">
+      <span class="nav-icon">◆</span>
+      <span class="nav-label">Posizioni</span>
+    </button>
+    <button class="nav-item" onclick="setTab('mandate')" id="tab-mandate">
+      <span class="nav-icon">⊞</span>
+      <span class="nav-label">Mandate</span>
+    </button>
+    <button class="nav-item" onclick="setTab('transactions')" id="tab-transactions">
+      <span class="nav-icon">≡</span>
+      <span class="nav-label">Transazioni</span>
+    </button>
+    <button class="nav-item" onclick="setTab('simulatore')" id="tab-simulatore">
+      <span class="nav-icon">◉</span>
+      <span class="nav-label">Sim</span>
+    </button>
+  </nav>
+
+  <!-- MODAL NUOVA OPERAZIONE -->
+  <div class="modal-overlay" id="modal-overlay" onclick="closeForm()"></div>
+  <div class="modal" id="modal-form">
+    <div class="modal-header">
+      <span class="modal-title">Nuova Operazione</span>
+      <button class="modal-close" onclick="closeForm()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Tipo operazione</label>
+        <div class="radio-group">
+          <button class="radio-btn active" onclick="setTipo('BUY', this)">BUY</button>
+          <button class="radio-btn" onclick="setTipo('SELL', this)">SELL</button>
+          <button class="radio-btn" onclick="setTipo('PAC', this)">PAC</button>
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Ticker</label>
+        <input type="text" id="f-ticker" placeholder="es. SWDA.MI" autocomplete="off" style="text-transform:uppercase">
+      </div>
+      <div class="form-group">
+        <label>Nome</label>
+        <input type="text" id="f-nome" placeholder="es. iShares MSCI World">
+      </div>
+      <div class="form-group">
+        <label>Asset Class</label>
+        <select id="f-ac">
+          <option value="ETF">ETF</option>
+          <option value="Azioni">Azioni</option>
+          <option value="Crypto">Crypto</option>
+          <option value="Fondi">Fondi</option>
+        </select>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Quantità</label>
+          <input type="number" id="f-qty" placeholder="0" step="any">
+        </div>
+        <div class="form-group">
+          <label>Prezzo €</label>
+          <input type="number" id="f-price" placeholder="0.00" step="any">
+        </div>
+      </div>
+      <div class="form-group">
+        <label>Commissione €</label>
+        <input type="number" id="f-comm" placeholder="0.00" step="any" value="0">
+      </div>
+      <div class="form-group">
+        <label>Data</label>
+        <input type="date" id="f-date">
+      </div>
+      <div class="form-group">
+        <label>Note</label>
+        <input type="text" id="f-note" placeholder="opzionale">
+      </div>
+      <div class="form-summary" id="form-summary"></div>
+      <button class="btn-primary" onclick="submitForm()" id="submit-btn">
+        Conferma operazione
+      </button>
+    </div>
+  </div>
+
+</div>
+<script src="app.js"></script>
+</body>
+</html>
