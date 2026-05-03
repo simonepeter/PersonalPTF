@@ -1,52 +1,37 @@
-// ─── CONFIG ──────────────────────────────────────────────
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwokJEIFatJ0Zz_T0iBrvgav4hegErxZ2WZQOB3sITO-J9i_ZL1NQ4WmGvPIXrEeTJnUg/exec';
+// PersonalPTF app.js v2.0
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxTPblW_RCgHALEkuvNUW6e659vpHRIBxrDTmLekf-EC_GIBeuOlb6eIrbv925b1AonYQ/exec';
+const AC_COLOR = { ETF:'#4090ff', Azioni:'#9b6dff', Crypto:'#ffb340', Cash:'#18d98b', Fondi:'#00d4ff' };
+const AC_BG    = { ETF:'#0f2450', Azioni:'#1e1040', Crypto:'#3a2000', Cash:'#063325', Fondi:'#003340' };
+let DATA = null, CURRENT_TAB = 'overview', FORM_TIPO = 'BUY';
+let SELECTED_SLICE = null, PERF_MODE = 'twr', PERF_PERIOD = 'ALL', TRX_SORT = { col:'netto', dir:-1 };
 
-// ─── COSTANTI COLORI ─────────────────────────────────────
-const AC_COLOR = { ETF:'#3b82f6', Azioni:'#8b5cf6', Crypto:'#f59e0b', Cash:'#10b981', Fondi:'#06b6d4' };
-const AC_BG    = { ETF:'#1e3a5f', Azioni:'#2d1b69', Crypto:'#451a03', Cash:'#064e3b', Fondi:'#164e63' };
-
-// ─── STATE ───────────────────────────────────────────────
-let DATA = null;
-let CURRENT_TAB = 'overview';
-let FORM_TIPO = 'BUY';
-
-// ─── INIT ────────────────────────────────────────────────
 window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('f-date').value = new Date().toISOString().split('T')[0];
-  ['f-qty','f-price','f-comm'].forEach(id => {
-    document.getElementById(id).addEventListener('input', updateFormSummary);
-  });
+  ['f-qty','f-price','f-comm'].forEach(id => document.getElementById(id).addEventListener('input', updateFormSummary));
   loadData();
 });
 
-// ─── LOAD DATA ───────────────────────────────────────────
 async function loadData() {
   show('loading'); hide('page-content');
-  document.getElementById('loading-text').textContent = 'Caricamento dati...';
+  document.getElementById('loading-text').textContent = 'Caricamento...';
   document.getElementById('live-badge').textContent = '...';
   try {
-    const res = await fetch(`${SCRIPT_URL}?action=getData`, { mode: 'cors' });
+    const res = await fetch(`${SCRIPT_URL}?action=getData`, { mode:'cors' });
     const d = await res.json();
     if (d.error) throw new Error(d.error);
     DATA = d;
-    document.getElementById('update-time').textContent = d.lastUpdate || '--';
+    document.getElementById('update-time').textContent = d.lastUpdate ? d.lastUpdate.substring(0,16) : '--';
     document.getElementById('live-badge').textContent = 'LIVE';
     hide('loading'); show('page-content');
     renderTab(CURRENT_TAB);
   } catch(e) {
-    document.getElementById('loading').innerHTML = `
-      <div style="padding:20px;width:100%;max-width:360px">
-        <div style="font-size:12px;color:var(--text3);margin-bottom:8px">Errore connessione</div>
-        <div class="error-banner">${e.message}</div>
-        <button class="btn-retry" onclick="loadData()">Riprova</button>
-      </div>`;
+    document.getElementById('loading').innerHTML = `<div style="padding:20px;width:100%;max-width:360px"><div style="font-size:12px;color:var(--text3);margin-bottom:8px">Errore connessione</div><div class="error-banner">${e.message}</div><button class="btn-retry" onclick="loadData()">Riprova</button></div>`;
     document.getElementById('live-badge').textContent = 'ERR';
   }
 }
 
-// ─── TAB NAVIGATION ──────────────────────────────────────
 function setTab(tab) {
-  CURRENT_TAB = tab;
+  CURRENT_TAB = tab; SELECTED_SLICE = null;
   document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
   document.getElementById('tab-' + tab).classList.add('active');
   document.getElementById('content').scrollTop = 0;
@@ -60,159 +45,214 @@ function renderTab(tab) {
   if (tab === 'simulatore') updateSim();
 }
 
-// ─── FORMATTERS ──────────────────────────────────────────
-function eur(n, dec=0) {
-  if (typeof n !== 'number' || isNaN(n)) return '—';
-  return new Intl.NumberFormat('it-IT', { style:'currency', currency:'EUR', maximumFractionDigits:dec }).format(n);
-}
+function eur(n, dec=0) { if (typeof n !== 'number' || isNaN(n)) return '—'; return new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR',maximumFractionDigits:dec}).format(n); }
 function rawPct(n) { return typeof n !== 'number' ? 0 : n * 100; }
-function show(id) { document.getElementById(id).style.display = ''; }
-function hide(id) { document.getElementById(id).style.display = 'none'; }
+function show(id) { const e=document.getElementById(id); if(e) e.style.display=''; }
+function hide(id) { const e=document.getElementById(id); if(e) e.style.display='none'; }
 function col(v) { return (typeof v === 'number' && v >= 0) ? 'var(--green)' : 'var(--red)'; }
 
-// ═══════════════════════════════════════════════════════════
-// OVERVIEW
-// ═══════════════════════════════════════════════════════════
+// ═══════ OVERVIEW CON DONUT ═══════
 function overview() {
   const o = DATA.overview || {};
   const pnlPct = rawPct(o.pnlPct).toFixed(2);
   const pnlC = col(o.pnlEur);
+  const pos = DATA.posizioni || [];
+  const tot = pos.reduce((s,p) => s + (p.mv||0), 0);
+  const byAC = {};
+  pos.forEach(p => { byAC[p.ac] = (byAC[p.ac]||0) + (p.mv||0); });
+  // Aggiungi cash
+  if (o.cashTotale) byAC['Cash'] = (byAC['Cash']||0) + o.cashTotale;
+  const donutSvg = buildDonut(byAC, tot + (o.cashTotale||0));
+  const legend = Object.entries(byAC).map(([ac,v]) => {
+    const pct = tot > 0 ? ((v/(tot+(o.cashTotale||0)))*100).toFixed(1) : '0';
+    return `<div class="legend-item" id="leg-${ac}" onclick="selectSlice('${ac}')">
+      <div class="legend-dot" style="background:${AC_COLOR[ac]||'#888'}"></div>
+      <span class="legend-label">${ac}</span>
+      <span class="legend-val">${pct}%</span>
+    </div>`;
+  }).join('');
   return `
-  <div class="grid2">
-    <div class="card card-sm">
-      <div class="card-glow" style="background:radial-gradient(circle,rgba(59,130,246,0.3),transparent)"></div>
-      <span class="kpi-icon">◈</span>
-      <div class="card-label">Patrimonio Totale</div>
-      <div class="card-value" style="font-size:19px">${eur(o.navTotale)}</div>
-      <div class="card-sub">Gestito + Pensioni</div>
-    </div>
-    <div class="card card-sm">
-      <div class="card-glow" style="background:radial-gradient(circle,rgba(16,185,129,0.3),transparent)"></div>
-      <span class="kpi-icon">◆</span>
-      <div class="card-label">Portafoglio Gestito</div>
-      <div class="card-value" style="font-size:19px">${eur(o.navGestito)}</div>
-      <div class="card-sub" style="color:${pnlC}">${(o.pnlEur||0)>=0?'+':''}${eur(o.pnlEur)} (${(o.pnlEur||0)>=0?'+':''}${pnlPct}%)</div>
-    </div>
-  </div>
-  <div class="grid2">
-    <div class="card card-sm">
-      <div class="card-glow" style="background:radial-gradient(circle,rgba(139,92,246,0.3),transparent)"></div>
-      <span class="kpi-icon">◉</span>
-      <div class="card-label">Patrimonio Stabile</div>
-      <div class="card-value" style="font-size:19px">${eur(o.navStabile)}</div>
-      <div class="card-sub">Fondi pensione</div>
-    </div>
-    <div class="card card-sm">
-      <div class="card-glow" style="background:radial-gradient(circle,rgba(245,158,11,0.3),transparent)"></div>
-      <span class="kpi-icon">◎</span>
-      <div class="card-label">Liquidità</div>
-      <div class="card-value" style="font-size:19px">${eur(o.cashTotale)}</div>
-      <div class="card-sub">Fineco ${eur(o.cashFineco)} · Kraken ${eur(o.cashKraken)}</div>
-    </div>
-  </div>
   <div class="pnl-summary">
     <div>
-      <div style="font-size:10px;color:var(--text3);font-weight:600;letter-spacing:0.5px">P&L GESTITO</div>
-      <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:${pnlC};letter-spacing:-0.5px">${(o.pnlEur||0)>=0?'+':''}${eur(o.pnlEur)}</div>
+      <div style="font-size:10px;color:var(--text3);font-weight:600;letter-spacing:0.5px">PATRIMONIO TOTALE</div>
+      <div style="font-size:22px;font-weight:700;font-family:var(--mono);color:var(--text)">${eur(o.navTotale)}</div>
+      <div style="font-size:11px;color:var(--text3)">Gestito ${eur(o.navGestito)} · Stabile ${eur(o.navStabile)}</div>
     </div>
     <div style="text-align:right">
-      <div style="font-size:30px;font-weight:700;font-family:var(--mono);color:${pnlC};letter-spacing:-1px">${(o.pnlEur||0)>=0?'+':''}${pnlPct}%</div>
+      <div style="font-size:26px;font-weight:700;font-family:var(--mono);color:${pnlC}">${(o.pnlEur||0)>=0?'+':''}${pnlPct}%</div>
+      <div style="font-size:12px;color:${pnlC}">${(o.pnlEur||0)>=0?'+':''}${eur(o.pnlEur)}</div>
       <div style="font-size:10px;color:var(--text3)">${o.nPos||0} posizioni</div>
     </div>
   </div>
-  ${_miniPosizioni()}
-  ${_miniMandate()}`;
-}
-
-function _miniPosizioni() {
-  const pos = (DATA.posizioni||[]).slice(0,4);
-  if (!pos.length) return '';
-  const rows = pos.map(p => {
-    const c = AC_COLOR[p.ac]||'#94a3b8', bg = AC_BG[p.ac]||'#1e293b';
-    const pp = rawPct(p.pnlPct).toFixed(2);
-    const pc = parseFloat(pp)>=0?'var(--green)':'var(--red)';
-    return `<div class="pos-item">
-      <div class="pos-avatar" style="background:${bg};color:${c}">${p.ticker.split('.')[0].slice(0,3)}</div>
-      <div class="pos-info"><div class="pos-ticker">${p.ticker}</div><div class="pos-name">${p.nome}</div></div>
-      <div class="pos-right"><div class="pos-mv">${eur(p.mv)}</div><div class="pos-pnl" style="color:${pc}">${parseFloat(pp)>=0?'+':''}${pp}%</div></div>
-    </div>`;
-  }).join('');
-  return `<div class="card"><div class="section-title">◆ Top Posizioni</div>${rows}
-    <div style="text-align:center;margin-top:10px">
-      <button onclick="setTab('posizioni')" style="background:none;border:none;color:var(--blue);font-size:12px;cursor:pointer;font-weight:600">Vedi tutte →</button>
+  <div class="card">
+    <div class="section-title">Allocazione portafoglio</div>
+    <div class="donut-wrap">
+      ${donutSvg}
+      <div class="donut-legend">${legend}</div>
+      <div class="donut-detail" id="donut-detail" style="display:none"></div>
     </div>
   </div>`;
 }
 
-function _miniMandate() {
-  const m = (DATA.mandate||[]).slice(0,4);
-  if (!m.length) return '';
-  const rows = m.map(row => {
-    const cur = typeof row.current==='number'?(row.current*100).toFixed(1):'—';
-    const tgt = typeof row.target==='number'?(row.target*100).toFixed(0):'—';
-    const bw = typeof row.current==='number'?Math.min(row.current*100,100):0;
-    const sc = row.status==='OK'?'var(--green)':row.status&&row.status.includes('SOTTO')?'var(--red)':'var(--amber)';
-    const fc = AC_COLOR[row.label]||'var(--blue)';
-    return `<div style="margin-bottom:10px">
-      <div style="display:flex;justify-content:space-between;margin-bottom:4px;font-size:11px">
-        <span style="font-weight:600">${row.label}</span>
-        <span style="color:${sc};font-weight:700">${cur}%<span style="color:var(--text3);font-weight:400"> / ${tgt}%</span></span>
-      </div>
-      <div class="bar-track"><div class="bar-fill" style="width:${bw.toFixed(1)}%;background:${fc}"></div><div class="bar-target" style="left:${parseFloat(tgt)}%"></div></div>
-    </div>`;
-  }).join('');
-  return `<div class="card"><div class="section-title">⊞ Allocazione</div>${rows}</div>`;
+function buildDonut(byAC, total) {
+  const R = 80, r = 52, cx = 120, cy = 120;
+  const entries = Object.entries(byAC).filter(([,v]) => v > 0);
+  let html = `<svg class="donut-svg" viewBox="0 0 240 240" width="240" height="240" onclick="handleDonutClick(event)">`;
+  // Cerchio sfondo
+  html += `<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="var(--surface2)" stroke-width="${R-r}"/>`;
+  let angle = -Math.PI/2;
+  entries.forEach(([ac, val], i) => {
+    const frac = val / total;
+    const sweep = frac * 2 * Math.PI;
+    const x1 = cx + R * Math.cos(angle), y1 = cy + R * Math.sin(angle);
+    const x2 = cx + R * Math.cos(angle + sweep), y2 = cy + R * Math.sin(angle + sweep);
+    const xi1 = cx + r * Math.cos(angle), yi1 = cy + r * Math.sin(angle);
+    const xi2 = cx + r * Math.cos(angle + sweep), yi2 = cy + r * Math.sin(angle + sweep);
+    const large = sweep > Math.PI ? 1 : 0;
+    const mid = angle + sweep/2;
+    const mx = cx + (R+r)/2 * Math.cos(mid), my = cy + (R+r)/2 * Math.sin(mid);
+    const path = `M ${x1} ${y1} A ${R} ${R} 0 ${large} 1 ${x2} ${y2} L ${xi2} ${yi2} A ${r} ${r} 0 ${large} 0 ${xi1} ${yi1} Z`;
+    html += `<path class="donut-slice" d="${path}" fill="${AC_COLOR[ac]||'#888'}" data-ac="${ac}" data-val="${val}" data-pct="${(frac*100).toFixed(1)}"/>`;
+    if (frac > 0.08) {
+      html += `<text x="${mx}" y="${my}" text-anchor="middle" dominant-baseline="middle" font-size="10" font-weight="700" fill="white" pointer-events="none">${(frac*100).toFixed(0)}%</text>`;
+    }
+    angle += sweep;
+  });
+  // Centro
+  html += `<text x="${cx}" y="${cy-10}" text-anchor="middle" dominant-baseline="middle" font-size="11" fill="var(--text3)" font-family="var(--font)">Gestito</text>`;
+  html += `<text x="${cx}" y="${cy+10}" text-anchor="middle" dominant-baseline="middle" font-size="14" font-weight="700" fill="var(--text)" font-family="var(--mono)">${eur(total-((DATA.overview||{}).cashTotale||0))}</text>`;
+  html += `</svg>`;
+  return html;
 }
 
-// ═══════════════════════════════════════════════════════════
-// PERFORMANCE
-// ═══════════════════════════════════════════════════════════
+function handleDonutClick(e) {
+  const slice = e.target.closest('.donut-slice');
+  if (!slice) { selectSlice(null); return; }
+  selectSlice(slice.dataset.ac, parseFloat(slice.dataset.val), parseFloat(slice.dataset.pct));
+}
+
+function selectSlice(ac, val, pct) {
+  SELECTED_SLICE = ac;
+  document.querySelectorAll('.donut-slice').forEach(s => {
+    s.classList.toggle('dimmed', ac && s.dataset.ac !== ac);
+  });
+  document.querySelectorAll('.legend-item').forEach(l => {
+    l.classList.toggle('active', l.id === 'leg-' + ac);
+  });
+  const detail = document.getElementById('donut-detail');
+  if (!detail) return;
+  if (!ac) { detail.style.display = 'none'; return; }
+  detail.style.display = 'block';
+  const pos = (DATA.posizioni||[]).filter(p => p.ac === ac);
+  const posRows = pos.map(p => {
+    const pp = rawPct(p.pnlPct).toFixed(2);
+    const pc = parseFloat(pp) >= 0 ? 'var(--green)' : 'var(--red)';
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border)">
+      <span style="font-size:12px;font-weight:600;color:var(--text)">${p.ticker}</span>
+      <span style="font-size:12px;font-family:var(--mono);color:var(--text)">${eur(p.mv)}</span>
+      <span style="font-size:11px;font-family:var(--mono);color:${pc}">${parseFloat(pp)>=0?'+':''}${pp}%</span>
+    </div>`;
+  }).join('');
+  const cashRow = ac === 'Cash' ? `<div style="display:flex;justify-content:space-between;padding:6px 0"><span style="font-size:12px;color:var(--text2)">Liquidità</span><span style="font-size:12px;font-family:var(--mono);color:var(--text)">${eur(val)}</span></div>` : '';
+  detail.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <span style="font-size:13px;font-weight:700;color:${AC_COLOR[ac]||'var(--text)'}">${ac}</span>
+      <span style="font-size:13px;font-family:var(--mono);color:var(--text);font-weight:700">${pct}% · ${eur(val)}</span>
+    </div>
+    ${posRows}${cashRow}`;
+}
+
+// ═══════ PERFORMANCE ═══════
 function performance() {
   const perf = DATA.performance||[];
   if (!perf.length) return '<div class="empty">Nessun dato performance.<br>Il sistema registra ogni giorno alle 18:00.</div>';
-  const last = perf[perf.length-1];
+  const filtered = filterPerf(perf);
+  const last = filtered[filtered.length-1];
   const twr = last.twr*100;
   const msci = last.msci!==null?last.msci*100:null;
   const sp = last.sp!==null?last.sp*100:null;
   const tc = twr>=0?'var(--green)':'var(--red)';
-  const chart = _buildChart(perf);
-  const labels = perf.filter((_,i)=>i%Math.max(1,Math.floor(perf.length/5))===0).map(p=>`<span class="chart-label">${p.data}</span>`).join('');
-  const benchRows = [{label:'TWR Cumulato',val:twr,color:tc},
-    msci!==null?{label:'MSCI World',val:msci,color:'var(--blue)'}:null,
-    sp!==null?{label:'S&P 500',val:sp,color:'var(--violet)'}:null,
-    msci!==null?{label:'Active vs MSCI',val:twr-msci,color:twr-msci>=0?'var(--green)':'var(--red)'}:null,
-  ].filter(Boolean).map(r=>`<div class="bench-row"><span style="font-size:12px;color:var(--text2)">${r.label}</span><span style="font-size:14px;font-weight:700;font-family:var(--mono);color:${r.color}">${r.val>=0?'+':''}${r.val.toFixed(2)}%</span></div>`).join('');
-  const hist = [...perf].reverse().slice(0,10).map(p=>{
+  const chart = PERF_MODE === 'twr' ? buildPerfChart(filtered) : buildNavChart(filtered);
+  const labels = filtered.filter((_,i)=>i%Math.max(1,Math.floor(filtered.length/5))===0).map(p=>`<span class="chart-label">${p.data}</span>`).join('');
+  const benchRows = [
+    {label:'TWR Cumulato', val:twr, color:tc},
+    msci!==null?{label:'MSCI World', val:msci, color:'var(--blue)'}:null,
+    sp!==null?{label:'S&P 500', val:sp, color:'var(--violet)'}:null,
+    msci!==null?{label:'Active vs MSCI', val:twr-msci, color:twr-msci>=0?'var(--green)':'var(--red)'}:null,
+  ].filter(Boolean).map(r=>`<div class="bench-row"><span class="bench-label">${r.label}</span><span class="bench-val" style="color:${r.color}">${r.val>=0?'+':''}${r.val.toFixed(2)}%</span></div>`).join('');
+  const hist = [...filtered].reverse().slice(0,10).map(p=>{
     const t=(p.twr*100).toFixed(2),c=parseFloat(t)>=0?'var(--green)':'var(--red)';
     return `<div class="bench-row"><span style="font-size:11px;color:var(--text3)">${p.data}</span><span style="font-family:var(--mono);font-size:12px;font-weight:600;color:${c}">${parseFloat(t)>=0?'+':''}${t}%</span></div>`;
   }).join('');
-  return `<div class="card">
-    <div class="perf-hero"><div class="perf-twr" style="color:${tc}">${twr>=0?'+':''}${twr.toFixed(2)}%</div><div class="perf-sub">TWR · ${perf.length} giorni · dal 21/04/2026</div></div>
-    <div class="chart-wrap">${chart}</div><div class="chart-labels">${labels}</div>
+  return `
+  <div class="card">
+    <div class="perf-hero">
+      <div class="perf-twr" style="color:${tc}">${twr>=0?'+':''}${twr.toFixed(2)}%</div>
+      <div class="perf-sub">Time-Weighted Return · ${filtered.length} giorni</div>
+    </div>
+    <div class="perf-switch">
+      <button class="perf-switch-btn ${PERF_MODE==='twr'?'active':''}" onclick="setPerfMode('twr')">📈 TWR %</button>
+      <button class="perf-switch-btn ${PERF_MODE==='nav'?'active':''}" onclick="setPerfMode('nav')">💶 NAV €</button>
+    </div>
+    <div class="period-wrap">
+      ${['1S','1M','3M','ALL'].map(p=>`<button class="period-btn ${PERF_PERIOD===p?'active':''}" onclick="setPeriod('${p}')">${p}</button>`).join('')}
+    </div>
+    <div class="chart-wrap">${chart}</div>
+    <div class="chart-labels">${labels}</div>
+    <div style="display:flex;gap:14px;margin-top:8px;font-size:10px;color:var(--text3)">
+      <span>— <span style="color:var(--green)">●</span> ${PERF_MODE==='nav'?'NAV':'TWR'}</span>
+      ${PERF_MODE==='twr'&&msci?'<span>-- <span style="color:var(--blue)">●</span> MSCI</span>':''}
+    </div>
   </div>
   <div class="card">${benchRows}</div>
-  <div class="card"><div class="section-title">Storico</div>${hist}</div>`;
+  <div class="card"><div class="section-title">Storico giornaliero</div>${hist}</div>`;
 }
 
-function _buildChart(perf) {
+function filterPerf(perf) {
+  if (PERF_PERIOD === 'ALL') return perf;
+  const days = { '1S':7, '1M':30, '3M':90 }[PERF_PERIOD] || 999;
+  return perf.slice(-days);
+}
+
+function setPerfMode(m) { PERF_MODE = m; renderTab('performance'); }
+function setPeriod(p) { PERF_PERIOD = p; renderTab('performance'); }
+
+function buildPerfChart(perf) {
   const W=320,H=110,PAD=8;
-  const tv=perf.map(p=>p.twr*100),mv=perf.map(p=>p.msci!==null?p.msci*100:null).filter(v=>v!==null),sv=perf.map(p=>p.sp!==null?p.sp*100:null).filter(v=>v!==null);
-  const all=[...tv,...mv,...sv],minV=Math.min(...all)-0.2,maxV=Math.max(...all)+0.2,rng=maxV-minV||1;
+  const tv=perf.map(p=>p.twr*100),mv=perf.map(p=>p.msci!==null?p.msci*100:null).filter(v=>v!==null);
+  const all=[...tv,...mv];
+  const minV=Math.min(...all)-0.2,maxV=Math.max(...all)+0.2,rng=maxV-minV||1;
   function pts(arr){return arr.map((v,i)=>{const x=PAD+(i/Math.max(arr.length-1,1))*(W-PAD*2),y=H-PAD-((v-minV)/rng)*(H-PAD*2);return `${x.toFixed(1)},${y.toFixed(1)}`;}).join(' ');}
-  const zY=H-PAD-((0-minV)/rng)*(H-PAD*2),li=tv.length-1;
-  const lx=PAD+(li/Math.max(tv.length-1,1))*(W-PAD*2),ly=H-PAD-((tv[li]-minV)/rng)*(H-PAD*2);
+  const zY=H-PAD-((0-minV)/rng)*(H-PAD*2);
+  const li=tv.length-1,lx=PAD+(li/Math.max(tv.length-1,1))*(W-PAD*2),ly=H-PAD-((tv[li]-minV)/rng)*(H-PAD*2);
+  const areaPath=`M ${PAD},${zY.toFixed(1)} ${tv.map((v,i)=>{const x=PAD+(i/Math.max(tv.length-1,1))*(W-PAD*2),y=H-PAD-((v-minV)/rng)*(H-PAD*2);return `L ${x.toFixed(1)},${y.toFixed(1)}`;}).join(' ')} L ${W-PAD},${zY.toFixed(1)} Z`;
   return `<svg class="chart" viewBox="0 0 ${W} ${H}">
-    <line x1="${PAD}" y1="${zY.toFixed(1)}" x2="${W-PAD}" y2="${zY.toFixed(1)}" stroke="rgba(255,255,255,0.07)" stroke-width="1" stroke-dasharray="3,3"/>
+    <defs><linearGradient id="ag" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--green)" stop-opacity="0.2"/><stop offset="100%" stop-color="var(--green)" stop-opacity="0"/></linearGradient></defs>
+    <line x1="${PAD}" y1="${zY.toFixed(1)}" x2="${W-PAD}" y2="${zY.toFixed(1)}" stroke="rgba(255,255,255,0.08)" stroke-width="1" stroke-dasharray="3,3"/>
+    <path d="${areaPath}" fill="url(#ag)"/>
     ${mv.length>1?`<polyline points="${pts(mv)}" fill="none" stroke="var(--blue)" stroke-width="1.5" stroke-opacity="0.5" stroke-dasharray="4,2"/>`:''}
-    ${sv.length>1?`<polyline points="${pts(sv)}" fill="none" stroke="var(--violet)" stroke-width="1.5" stroke-opacity="0.5" stroke-dasharray="4,2"/>`:''}
     <polyline points="${pts(tv)}" fill="none" stroke="var(--green)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
     <circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="4" fill="var(--green)"/>
   </svg>`;
 }
 
-// ═══════════════════════════════════════════════════════════
-// POSIZIONI
-// ═══════════════════════════════════════════════════════════
+function buildNavChart(perf) {
+  const W=320,H=110,PAD=8;
+  const navV=perf.map(p=>p.nav).filter(v=>v>0);
+  if (!navV.length) return '<div class="empty">NAV non disponibile</div>';
+  const minV=Math.min(...navV)*0.995,maxV=Math.max(...navV)*1.005,rng=maxV-minV||1;
+  const pts=navV.map((v,i)=>{const x=PAD+(i/Math.max(navV.length-1,1))*(W-PAD*2),y=H-PAD-((v-minV)/rng)*(H-PAD*2);return `${x.toFixed(1)},${y.toFixed(1)}`;}).join(' ');
+  const li=navV.length-1,lx=PAD+(li/Math.max(navV.length-1,1))*(W-PAD*2),ly=H-PAD-((navV[li]-minV)/rng)*(H-PAD*2);
+  const areaPath=`M ${PAD},${(H-PAD).toFixed(1)} ${navV.map((v,i)=>{const x=PAD+(i/Math.max(navV.length-1,1))*(W-PAD*2),y=H-PAD-((v-minV)/rng)*(H-PAD*2);return `L ${x.toFixed(1)},${y.toFixed(1)}`;}).join(' ')} L ${(W-PAD).toFixed(1)},${(H-PAD).toFixed(1)} Z`;
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}">
+    <defs><linearGradient id="ng" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--blue)" stop-opacity="0.2"/><stop offset="100%" stop-color="var(--blue)" stop-opacity="0"/></linearGradient></defs>
+    <path d="${areaPath}" fill="url(#ng)"/>
+    <polyline points="${pts}" fill="none" stroke="var(--blue)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="4" fill="var(--blue)"/>
+  </svg>`;
+}
+
+// ═══════ POSIZIONI ═══════
 function posizioni() {
   const pos=DATA.posizioni||[];
   if (!pos.length) return '<div class="empty">Nessuna posizione aperta.</div>';
@@ -234,54 +274,94 @@ function posizioni() {
   return `<div class="card"><div class="section-title">◆ ${pos.length} Posizioni aperte</div>${rows}</div>`;
 }
 
-// ═══════════════════════════════════════════════════════════
-// MANDATE
-// ═══════════════════════════════════════════════════════════
+// ═══════ MANDATE ═══════
 function mandate() {
   const m=DATA.mandate||[];
   if (!m.length) return '<div class="empty">Nessun dato mandate.</div>';
   const rows=m.map(row=>{
     const cur=typeof row.current==='number'?row.current:0,tgt=typeof row.target==='number'?row.target:0;
+    const min=typeof row.min==='number'?row.min:0,max=typeof row.max==='number'?row.max:1;
     const drift=cur-tgt,bw=Math.min(cur*100,100),tw=Math.min(tgt*100,100);
+    const minW=Math.min(min*100,100),maxW=Math.min(max*100,100);
     const sc=row.status==='OK'?'var(--green)':row.status&&row.status.includes('SOTTO')?'var(--red)':'var(--amber)';
-    const scBg=row.status==='OK'?'rgba(16,185,129,0.12)':row.status&&row.status.includes('SOTTO')?'rgba(239,68,68,0.12)':'rgba(245,158,11,0.12)';
+    const scBg=row.status==='OK'?'rgba(24,217,139,0.12)':row.status&&row.status.includes('SOTTO')?'rgba(255,77,106,0.12)':'rgba(255,179,64,0.12)';
     const fc=AC_COLOR[row.label]||'var(--blue)';
     const ds=drift>=0?`+${(drift*100).toFixed(1)}%`:`${(drift*100).toFixed(1)}%`;
     const dc=Math.abs(drift)>0.05?(drift>0?'var(--amber)':'var(--blue)'):'var(--text3)';
     return `<div class="mandate-row">
-      <div class="mandate-top"><span class="mandate-label" style="color:${fc}">${row.label}</span><span class="mandate-status" style="background:${scBg};color:${sc}">${row.status||'OK'}</span></div>
-      <div class="bar-track"><div class="bar-fill" style="width:${bw.toFixed(1)}%;background:${fc}"></div><div class="bar-target" style="left:${tw.toFixed(1)}%"></div></div>
-      <div class="mandate-nums"><span>Attuale: <b style="color:var(--text)">${(cur*100).toFixed(1)}%</b></span><span>Target: <b style="color:var(--text)">${(tgt*100).toFixed(0)}%</b></span><span style="color:${dc}">Drift: <b>${ds}</b></span></div>
+      <div class="mandate-top">
+        <span class="mandate-label" style="color:${fc}">${row.label}</span>
+        <span class="mandate-status" style="background:${scBg};color:${sc}">${row.status||'OK'}</span>
+      </div>
+      <!-- barra con zona valida evidenziata -->
+      <div class="bar-track" style="height:8px">
+        <div style="position:absolute;left:${minW.toFixed(1)}%;width:${(maxW-minW).toFixed(1)}%;height:100%;background:rgba(255,255,255,0.06);border-radius:3px"></div>
+        <div class="bar-fill" style="width:${bw.toFixed(1)}%;background:${fc}"></div>
+        <div class="bar-target" style="left:${tw.toFixed(1)}%;width:3px;background:white;opacity:0.7"></div>
+      </div>
+      <div class="mandate-nums" style="margin-top:8px">
+        <span>Attuale: <b>${(cur*100).toFixed(1)}%</b></span>
+        <span>Target: <b>${(tgt*100).toFixed(0)}%</b></span>
+        <span style="color:${dc}">Drift: <b>${ds}</b></span>
+      </div>
+      <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text4);margin-top:4px">
+        <span>Min ${(min*100).toFixed(0)}%</span><span>Max ${(max*100).toFixed(0)}%</span>
+      </div>
     </div>`;
   }).join('');
   return `<div class="section-title">⊞ Allocazione Mandate</div>${rows}`;
 }
 
-// ═══════════════════════════════════════════════════════════
-// TRANSACTIONS
-// ═══════════════════════════════════════════════════════════
+// ═══════ TRANSACTIONS ORDINABILI ═══════
 function transactions() {
   const trx=DATA.transactions||[];
   if (!trx.length) return '<div class="empty">Nessuna transazione trovata.</div>';
-  const rows=trx.map(t=>{
+  // Calcola totale per %
+  const totAbs = trx.reduce((s,t)=>s+Math.abs(t.netto||0),0);
+  // Ordina
+  const sorted=[...trx].sort((a,b)=>{
+    let va=a[TRX_SORT.col]||0,vb=b[TRX_SORT.col]||0;
+    if (typeof va==='string') va=va.toLowerCase(),vb=vb.toLowerCase();
+    return TRX_SORT.dir * (va>vb?1:va<vb?-1:0);
+  });
+  function th(label,col) {
+    const active=TRX_SORT.col===col;
+    const arrow=active?(TRX_SORT.dir===1?'↑':'↓'):'';
+    return `<th class="${active?'sort-active':''}" onclick="sortTrx('${col}')">${label} ${arrow}</th>`;
+  }
+  const rows=sorted.map(t=>{
     const isBuy=t.tipo==='BUY'||t.tipo==='PAC',isSell=t.tipo==='SELL';
     const tc=isBuy?'var(--green)':isSell?'var(--red)':'var(--amber)';
-    const tbg=isBuy?'rgba(16,185,129,0.12)':isSell?'rgba(239,68,68,0.12)':'rgba(245,158,11,0.12)';
+    const tbg=isBuy?'rgba(24,217,139,0.12)':isSell?'rgba(255,77,106,0.12)':'rgba(255,179,64,0.12)';
     const ac=isBuy?'var(--red)':'var(--green)';
-    const amt=typeof t.netto==='number'?eur(Math.abs(t.netto)):'—';
-    const c=AC_COLOR[t.ac]||'#94a3b8',bg=AC_BG[t.ac]||'#1e293b';
-    return `<div class="trx-item">
-      <div class="trx-badge" style="background:${bg};color:${c}">${(t.ticker||'').slice(0,3)}</div>
-      <div class="trx-info"><div class="trx-ticker">${t.ticker} <span class="trx-type" style="background:${tbg};color:${tc}">${t.tipo}</span></div><div class="trx-date">${t.data} · ${(t.nome||'').slice(0,22)}</div></div>
-      <div class="trx-right"><div class="trx-amount" style="color:${ac}">${isBuy?'-':'+'}${amt}</div>${t.pnlNetto&&typeof t.pnlNetto==='number'?`<div style="font-size:10px;color:var(--green);font-weight:600">P&L ${eur(t.pnlNetto)}</div>`:''}</div>
-    </div>`;
+    const amt=typeof t.netto==='number'?Math.abs(t.netto):0;
+    const pctVal=totAbs>0?((amt/totAbs)*100).toFixed(1):'0';
+    const c=AC_COLOR[t.ac]||'#888',bg=AC_BG[t.ac]||'#1e293b';
+    return `<tr>
+      <td><div class="trx-ticker-cell">
+        <div class="trx-badge" style="background:${bg};color:${c}">${(t.ticker||'').slice(0,3)}</div>
+        <div><div class="trx-name">${t.ticker} <span class="trx-type" style="background:${tbg};color:${tc}">${t.tipo}</span></div><div class="trx-date">${t.data}</div></div>
+      </div></td>
+      <td class="num" style="color:${ac}">${isBuy?'-':'+'}${eur(amt)}</td>
+      <td class="pct" style="color:var(--text3)">${pctVal}%</td>
+    </tr>`;
   }).join('');
-  return `<div class="card"><div class="section-title">≡ Ultime 50 transazioni</div>${rows}</div>`;
+  return `<div class="card" style="overflow-x:auto">
+    <div class="section-title">≡ Ultime 50 transazioni</div>
+    <table class="trx-table">
+      <thead><tr>${th('Titolo','ticker')}${th('Importo','netto')}${th('%','pct')}</tr></thead>
+      <tbody>${rows}</tbody>
+    </table>
+  </div>`;
 }
 
-// ═══════════════════════════════════════════════════════════
-// SIMULATORE
-// ═══════════════════════════════════════════════════════════
+function sortTrx(col) {
+  if (TRX_SORT.col === col) TRX_SORT.dir *= -1;
+  else { TRX_SORT.col = col; TRX_SORT.dir = -1; }
+  renderTab('transactions');
+}
+
+// ═══════ SIMULATORE ═══════
 function simulatore() {
   const cap=(DATA.overview&&DATA.overview.navGestito)||21000;
   return `
@@ -293,7 +373,7 @@ function simulatore() {
   </div>
   <div class="scenario-cards">
     <div class="scenario-card"><div class="scenario-label" style="color:var(--red)">⬇ Pess.</div><div class="scenario-value" id="sc-pess" style="color:var(--red)">—</div><div class="scenario-sub">+3%/anno</div></div>
-    <div class="scenario-card" style="border-color:rgba(59,130,246,0.25)"><div class="scenario-label" style="color:var(--blue)">→ Base</div><div class="scenario-value" id="sc-base" style="color:var(--blue)">—</div><div class="scenario-sub">+7%/anno</div></div>
+    <div class="scenario-card" style="border-color:rgba(64,144,255,0.3)"><div class="scenario-label" style="color:var(--blue)">→ Base</div><div class="scenario-value" id="sc-base" style="color:var(--blue)">—</div><div class="scenario-sub">+7%/anno</div></div>
     <div class="scenario-card"><div class="scenario-label" style="color:var(--green)">⬆ Ott.</div><div class="scenario-value" id="sc-opt" style="color:var(--green)">—</div><div class="scenario-sub">+12%/anno</div></div>
   </div>
   <div class="card">
@@ -326,57 +406,35 @@ function updateSim() {
     <polyline points="${pts(sO)}" fill="none" stroke="var(--green)" stroke-width="1.5" stroke-opacity="0.6" stroke-dasharray="4,2"/>`;
 }
 
-// ═══════════════════════════════════════════════════════════
-// FORM NUOVA OPERAZIONE
-// ═══════════════════════════════════════════════════════════
-function openForm() {
-  document.getElementById('modal-overlay').classList.add('open');
-  document.getElementById('modal-form').classList.add('open');
-  document.getElementById('f-ticker').focus();
-}
-function closeForm() {
-  document.getElementById('modal-overlay').classList.remove('open');
-  document.getElementById('modal-form').classList.remove('open');
-}
-function setTipo(tipo, btn) {
-  FORM_TIPO = tipo;
-  document.querySelectorAll('.radio-btn').forEach(b => b.classList.remove('active'));
-  btn.classList.add('active');
-  updateFormSummary();
-}
+// ═══════ FORM ═══════
+function openForm() { document.getElementById('modal-overlay').classList.add('open'); document.getElementById('modal-form').classList.add('open'); document.getElementById('f-ticker').focus(); }
+function closeForm() { document.getElementById('modal-overlay').classList.remove('open'); document.getElementById('modal-form').classList.remove('open'); }
+function setTipo(tipo, btn) { FORM_TIPO=tipo; document.querySelectorAll('.radio-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); updateFormSummary(); }
 function updateFormSummary() {
-  const qty=parseFloat(document.getElementById('f-qty').value)||0;
-  const price=parseFloat(document.getElementById('f-price').value)||0;
-  const comm=parseFloat(document.getElementById('f-comm').value)||0;
+  const qty=parseFloat(document.getElementById('f-qty').value)||0,price=parseFloat(document.getElementById('f-price').value)||0,comm=parseFloat(document.getElementById('f-comm').value)||0;
   const ticker=document.getElementById('f-ticker').value.toUpperCase()||'—';
   if (!qty||!price){document.getElementById('form-summary').classList.remove('visible');return;}
   const totale=qty*price,netto=FORM_TIPO==='SELL'?totale-comm:-(totale+comm);
   document.getElementById('form-summary').classList.add('visible');
-  document.getElementById('form-summary').innerHTML=`${FORM_TIPO} ${qty} × ${ticker} @ €${price.toFixed(2)}\nTotale: ${eur(totale,2)} | Comm: ${eur(comm,2)} | Netto: ${eur(Math.abs(netto),2)}`;
+  document.getElementById('form-summary').innerHTML=`${FORM_TIPO} ${qty} × ${ticker} @ €${price.toFixed(2)}\nTotale: ${eur(totale,2)}  Comm: ${eur(comm,2)}  Netto: ${eur(Math.abs(netto),2)}`;
 }
 async function submitForm() {
-  const ticker=document.getElementById('f-ticker').value.toUpperCase().trim();
-  const nome=document.getElementById('f-nome').value.trim();
-  const ac=document.getElementById('f-ac').value;
-  const qty=parseFloat(document.getElementById('f-qty').value);
-  const price=parseFloat(document.getElementById('f-price').value);
-  const comm=parseFloat(document.getElementById('f-comm').value)||0;
-  const date=document.getElementById('f-date').value;
-  const note=document.getElementById('f-note').value.trim();
+  const ticker=document.getElementById('f-ticker').value.toUpperCase().trim(),nome=document.getElementById('f-nome').value.trim();
+  const ac=document.getElementById('f-ac').value,qty=parseFloat(document.getElementById('f-qty').value);
+  const price=parseFloat(document.getElementById('f-price').value),comm=parseFloat(document.getElementById('f-comm').value)||0;
+  const date=document.getElementById('f-date').value,note=document.getElementById('f-note').value.trim();
   if (!ticker||!qty||!price||!date){alert('Compila Ticker, Quantità, Prezzo e Data');return;}
   const btn=document.getElementById('submit-btn');
   btn.classList.add('loading');btn.textContent='Salvataggio...';
   const totale=qty*price,netto=FORM_TIPO==='SELL'?totale-comm:-(totale+comm);
-  const payload={ticker,nome,ac,tipo:FORM_TIPO,qty,price,comm,totale,netto,date,note};
   try {
-    const res=await fetch(`${SCRIPT_URL}?action=addTransaction`,{method:'POST',mode:'cors',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)});
+    const res=await fetch(`${SCRIPT_URL}?action=addTransaction`,{method:'POST',mode:'cors',headers:{'Content-Type':'application/json'},body:JSON.stringify({ticker,nome,ac,tipo:FORM_TIPO,qty,price,comm,totale,netto,date,note})});
     const d=await res.json();
     if (d.error) throw new Error(d.error);
     btn.classList.remove('loading');btn.classList.add('success');btn.textContent='✓ Salvato!';
     setTimeout(()=>{closeForm();btn.classList.remove('success');btn.textContent='Conferma operazione';loadData();},1200);
   } catch(e) {
-    btn.classList.remove('loading');btn.classList.add('error');btn.textContent='✕ Errore — riprova';
+    btn.classList.remove('loading');btn.classList.add('error');btn.textContent='✕ Errore';
     setTimeout(()=>{btn.classList.remove('error');btn.textContent='Conferma operazione';},2000);
-    console.error(e);
   }
 }
