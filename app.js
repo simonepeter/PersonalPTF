@@ -1,10 +1,22 @@
-// PersonalPTF app.js v2.1
+// PersonalPTF app.js v2.2
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwokJEIFatJ0Zz_T0iBrvgav4hegErxZ2WZQOB3sITO-J9i_ZL1NQ4WmGvPIXrEeTJnUg/exec';
 const AC_COLOR = { ETF:'#4090ff', Azioni:'#9b6dff', Crypto:'#ffb340', Cash:'#18d98b', Fondi:'#00d4ff' };
 const AC_BG    = { ETF:'#0f2450', Azioni:'#1e1040', Crypto:'#3a2000', Cash:'#063325', Fondi:'#003340' };
+
+// Mapping mandate labels → sezioni
+const MANDATE_SECTIONS = {
+  'L1 — Asset Class': ['ETF','Azioni','Cash','Crypto','Fondi'],
+  'L2 — Geografia': ['USA / Nord America','Europa','Emerging Markets','Asia Sviluppata','Global / Multi'],
+  'L3 — Settori': ['Technology','Financials','Consumer','Healthcare','Energy','Materie Prime','Other / Multi'],
+  'L4 — Valuta': ['EUR','USD','Other'],
+};
+
 let DATA = null, CURRENT_TAB = 'overview', FORM_TIPO = 'BUY';
-let SELECTED_SLICE = null, PERF_MODE = 'twr', PERF_PERIOD = 'ALL', TRX_SORT = { col:'netto', dir:-1 };
-let EXPANDED_POS = null;
+let SELECTED_SLICE = null;
+let PERF_MODE = 'twr', PERF_PERIOD = 'ALL';
+let TRX_SORT = { col:'netto', dir:-1 };
+let POS_SORT = { col:'mv', dir:-1 }, EXPANDED_POS = null;
+let MANDATE_OPEN = { 'L1 — Asset Class': true, 'L2 — Geografia': false, 'L3 — Settori': false, 'L4 — Valuta': false };
 
 window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('f-date').value = new Date().toISOString().split('T')[0];
@@ -52,7 +64,9 @@ function show(id) { const e=document.getElementById(id); if(e) e.style.display='
 function hide(id) { const e=document.getElementById(id); if(e) e.style.display='none'; }
 function col(v) { return (typeof v === 'number' && v >= 0) ? 'var(--green)' : 'var(--red)'; }
 
-// ═══════ OVERVIEW CON DONUT ═══════
+// ═══════════════════════════════════════════════════════════
+// OVERVIEW — DONUT
+// ═══════════════════════════════════════════════════════════
 function overview() {
   const o = DATA.overview || {};
   const pnlPct = rawPct(o.pnlPct).toFixed(2);
@@ -62,15 +76,7 @@ function overview() {
   pos.forEach(p => { byAC[p.ac] = (byAC[p.ac]||0) + (p.mv||0); });
   if (o.cashTotale) byAC['Cash'] = (byAC['Cash']||0) + o.cashTotale;
   const grandTotal = Object.values(byAC).reduce((s,v)=>s+v,0);
-  const donutSvg = buildDonut(byAC, grandTotal, o.navGestito);
-  const legend = Object.entries(byAC).map(([ac,v]) => {
-    const pct = grandTotal > 0 ? ((v/grandTotal)*100).toFixed(1) : '0';
-    return `<div class="legend-item" id="leg-${ac}" onclick="selectSlice('${ac}')">
-      <div class="legend-dot" style="background:${AC_COLOR[ac]||'#888'}"></div>
-      <span class="legend-label">${ac}</span>
-      <span class="legend-val">${pct}%</span>
-    </div>`;
-  }).join('');
+
   return `
   <div class="pnl-summary">
     <div>
@@ -87,30 +93,38 @@ function overview() {
   <div class="card">
     <div class="section-title">Allocazione portafoglio</div>
     <div class="donut-wrap">
-      ${donutSvg}
-      <div class="donut-legend">${legend}</div>
+      ${buildDonut(byAC, grandTotal, o.navGestito)}
+      <div class="donut-legend">
+        ${Object.entries(byAC).map(([ac,v]) => {
+          const pct = grandTotal > 0 ? ((v/grandTotal)*100).toFixed(1) : '0';
+          return `<div class="legend-item" id="leg-${ac}" onclick="selectSlice('${ac}')">
+            <div class="legend-dot" style="background:${AC_COLOR[ac]||'#888'}"></div>
+            <span class="legend-label">${ac}</span>
+            <span class="legend-val">${pct}%</span>
+          </div>`;
+        }).join('')}
+      </div>
     </div>
     <div class="donut-detail" id="donut-detail" style="display:none"></div>
   </div>`;
 }
 
 function buildDonut(byAC, total, gestito) {
-  // Cerchio più grande
-  const R = 100, r = 65, cx = 140, cy = 140;
+  const R=110, r=72, cx=150, cy=150;
   const entries = Object.entries(byAC).filter(([,v]) => v > 0);
-  let html = `<svg class="donut-svg" viewBox="0 0 280 280" width="280" height="280" onclick="handleDonutClick(event)">`;
+  let html = `<svg class="donut-svg" viewBox="0 0 300 300" width="300" height="300" onclick="handleDonutClick(event)">`;
   html += `<circle cx="${cx}" cy="${cy}" r="${R}" fill="none" stroke="var(--surface2)" stroke-width="${R-r}"/>`;
   let angle = -Math.PI/2;
   entries.forEach(([ac, val]) => {
     const frac = val / total;
     const sweep = frac * 2 * Math.PI;
-    const x1 = cx + R * Math.cos(angle), y1 = cy + R * Math.sin(angle);
-    const x2 = cx + R * Math.cos(angle + sweep), y2 = cy + R * Math.sin(angle + sweep);
-    const xi1 = cx + r * Math.cos(angle), yi1 = cy + r * Math.sin(angle);
-    const xi2 = cx + r * Math.cos(angle + sweep), yi2 = cy + r * Math.sin(angle + sweep);
+    const x1=cx+R*Math.cos(angle), y1=cy+R*Math.sin(angle);
+    const x2=cx+R*Math.cos(angle+sweep), y2=cy+R*Math.sin(angle+sweep);
+    const xi1=cx+r*Math.cos(angle), yi1=cy+r*Math.sin(angle);
+    const xi2=cx+r*Math.cos(angle+sweep), yi2=cy+r*Math.sin(angle+sweep);
     const large = sweep > Math.PI ? 1 : 0;
     const mid = angle + sweep/2;
-    const mx = cx + (R+r)/2 * Math.cos(mid), my = cy + (R+r)/2 * Math.sin(mid);
+    const mx=cx+(R+r)/2*Math.cos(mid), my=cy+(R+r)/2*Math.sin(mid);
     const path = `M ${x1.toFixed(1)} ${y1.toFixed(1)} A ${R} ${R} 0 ${large} 1 ${x2.toFixed(1)} ${y2.toFixed(1)} L ${xi2.toFixed(1)} ${yi2.toFixed(1)} A ${r} ${r} 0 ${large} 0 ${xi1.toFixed(1)} ${yi1.toFixed(1)} Z`;
     html += `<path class="donut-slice" d="${path}" fill="${AC_COLOR[ac]||'#888'}" data-ac="${ac}" data-val="${val.toFixed(0)}" data-pct="${(frac*100).toFixed(1)}"/>`;
     if (frac > 0.07) {
@@ -118,10 +132,9 @@ function buildDonut(byAC, total, gestito) {
     }
     angle += sweep;
   });
-  // Centro — mostra gestito di default
   html += `<g id="donut-center" pointer-events="none">
-    <text id="dc-label" x="${cx}" y="${cy-14}" text-anchor="middle" font-size="11" fill="var(--text3)" font-family="var(--font)">Gestito</text>
-    <text id="dc-value" x="${cx}" y="${cy+8}" text-anchor="middle" font-size="16" font-weight="700" fill="var(--text)" font-family="var(--mono)">${eur(gestito)}</text>
+    <text id="dc-label" x="${cx}" y="${cy-16}" text-anchor="middle" font-size="11" fill="var(--text3)" font-family="var(--font)">Gestito</text>
+    <text id="dc-value" x="${cx}" y="${cy+8}" text-anchor="middle" font-size="15" font-weight="700" fill="var(--text)" font-family="var(--mono)">${eur(gestito)}</text>
   </g>`;
   html += `</svg>`;
   return html;
@@ -129,37 +142,19 @@ function buildDonut(byAC, total, gestito) {
 
 function handleDonutClick(e) {
   const slice = e.target.closest('.donut-slice');
-  if (!slice) {
-    selectSlice(null);
-    return;
-  }
-  selectSlice(slice.dataset.ac, parseFloat(slice.dataset.val), parseFloat(slice.dataset.pct));
+  slice ? selectSlice(slice.dataset.ac, parseFloat(slice.dataset.val), parseFloat(slice.dataset.pct)) : selectSlice(null);
 }
 
 function selectSlice(ac, val, pct) {
   SELECTED_SLICE = ac;
-  // Aggiorna fette
-  document.querySelectorAll('.donut-slice').forEach(s => {
-    s.classList.toggle('dimmed', !!ac && s.dataset.ac !== ac);
-  });
-  // Aggiorna legenda
-  document.querySelectorAll('.legend-item').forEach(l => {
-    l.classList.toggle('active', l.id === 'leg-' + ac);
-  });
-  // Aggiorna centro donut
+  document.querySelectorAll('.donut-slice').forEach(s => s.classList.toggle('dimmed', !!ac && s.dataset.ac !== ac));
+  document.querySelectorAll('.legend-item').forEach(l => l.classList.toggle('active', l.id === 'leg-' + ac));
   const dcLabel = document.getElementById('dc-label');
   const dcValue = document.getElementById('dc-value');
   if (dcLabel && dcValue) {
-    if (ac) {
-      dcLabel.textContent = ac;
-      dcValue.textContent = eur(val);
-    } else {
-      dcLabel.textContent = 'Gestito';
-      const gestito = (DATA.overview||{}).navGestito || 0;
-      dcValue.textContent = eur(gestito);
-    }
+    if (ac) { dcLabel.textContent = ac; dcValue.textContent = eur(val); }
+    else { dcLabel.textContent = 'Gestito'; dcValue.textContent = eur((DATA.overview||{}).navGestito||0); }
   }
-  // Dettaglio sotto
   const detail = document.getElementById('donut-detail');
   if (!detail) return;
   if (!ac) { detail.style.display = 'none'; return; }
@@ -170,39 +165,29 @@ function selectSlice(ac, val, pct) {
   if (ac === 'Cash') {
     const o = DATA.overview || {};
     rows = `
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
-        <div>
-          <div style="font-size:13px;font-weight:600;color:var(--text)">Fineco</div>
-          <div style="font-size:11px;color:var(--text3)">Conto corrente</div>
-        </div>
-        <div style="text-align:right">
-          <div style="font-size:14px;font-weight:700;font-family:var(--mono);color:var(--text)">${eur(o.cashFineco)}</div>
-        </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border)">
+        <div><div style="font-size:13px;font-weight:600;color:var(--text)">Fineco</div><div style="font-size:11px;color:var(--text3)">Conto corrente</div></div>
+        <div style="font-size:15px;font-weight:700;font-family:var(--mono)">${eur(o.cashFineco)}</div>
       </div>
-      <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0">
-        <div>
-          <div style="font-size:13px;font-weight:600;color:var(--text)">Kraken</div>
-          <div style="font-size:11px;color:var(--text3)">Exchange crypto</div>
-        </div>
-        <div style="text-align:right">
-          <div style="font-size:14px;font-weight:700;font-family:var(--mono);color:var(--text)">${eur(o.cashKraken)}</div>
-        </div>
+      <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0">
+        <div><div style="font-size:13px;font-weight:600;color:var(--text)">Kraken</div><div style="font-size:11px;color:var(--text3)">Exchange crypto</div></div>
+        <div style="font-size:15px;font-weight:700;font-family:var(--mono)">${eur(o.cashKraken)}</div>
       </div>`;
   } else {
     rows = pos.map(p => {
       const pp = rawPct(p.pnlPct).toFixed(2);
       const pc = parseFloat(pp) >= 0 ? 'var(--green)' : 'var(--red)';
       const bw = tot > 0 ? ((p.mv/tot)*100).toFixed(0) : 0;
-      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
-        <div style="flex:1;min-width:0">
+      return `<div style="display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid var(--border)">
+        <div style="flex:1;min-width:0;margin-right:16px">
           <div style="font-size:14px;font-weight:700;color:var(--text)">${p.ticker}</div>
-          <div style="font-size:11px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${p.nome}</div>
-          <div style="height:3px;background:var(--surface3);border-radius:2px;margin-top:6px;width:100%">
+          <div style="font-size:11px;color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${p.nome}</div>
+          <div style="height:3px;background:var(--surface3);border-radius:2px;margin-top:7px">
             <div style="height:100%;width:${bw}%;background:${AC_COLOR[ac]||'var(--blue)'};border-radius:2px"></div>
           </div>
         </div>
-        <div style="text-align:right;margin-left:16px;flex-shrink:0">
-          <div style="font-size:15px;font-weight:700;font-family:var(--mono);color:var(--text)">${eur(p.mv)}</div>
+        <div style="text-align:right;flex-shrink:0">
+          <div style="font-size:15px;font-weight:700;font-family:var(--mono)">${eur(p.mv)}</div>
           <div style="font-size:13px;font-weight:700;font-family:var(--mono);color:${pc}">${parseFloat(pp)>=0?'+':''}${pp}%</div>
         </div>
       </div>`;
@@ -211,51 +196,108 @@ function selectSlice(ac, val, pct) {
   detail.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;padding-bottom:12px;border-bottom:1px solid var(--border2);margin-bottom:4px">
       <span style="font-size:14px;font-weight:700;color:${AC_COLOR[ac]||'var(--text)'}">${ac}</span>
-      <span style="font-size:14px;font-family:var(--mono);color:var(--text);font-weight:700">${pct}% · ${eur(val)}</span>
-    </div>
-    ${rows}`;
+      <span style="font-size:14px;font-family:var(--mono);font-weight:700">${pct}% · ${eur(val)}</span>
+    </div>${rows}`;
 }
 
-// ═══════ PERFORMANCE ═══════
+// ═══════════════════════════════════════════════════════════
+// PERFORMANCE — 3 GRAFICI + Y-AXIS
+// ═══════════════════════════════════════════════════════════
 function performance() {
   const perf = DATA.performance||[];
   if (!perf.length) return '<div class="empty">Nessun dato performance.<br>Il sistema registra ogni giorno alle 18:00.</div>';
   const filtered = filterPerf(perf);
-  const last = filtered[filtered.length-1];
-  const twr = last.twr*100;
-  const msci = last.msci!==null?last.msci*100:null;
-  const sp = last.sp!==null?last.sp*100:null;
-  const tc = twr>=0?'var(--green)':'var(--red)';
-  const chart = PERF_MODE === 'twr' ? buildPerfChart(filtered) : buildNavChart(filtered);
-  const labels = filtered.filter((_,i)=>i%Math.max(1,Math.floor(filtered.length/5))===0).map(p=>`<span class="chart-label">${p.data}</span>`).join('');
-  const benchRows = [
-    {label:'TWR Cumulato', val:twr, color:tc},
-    msci!==null?{label:'MSCI World', val:msci, color:'var(--blue)'}:null,
-    sp!==null?{label:'S&P 500', val:sp, color:'var(--violet)'}:null,
-    msci!==null?{label:'Active vs MSCI', val:twr-msci, color:twr-msci>=0?'var(--green)':'var(--red)'}:null,
-  ].filter(Boolean).map(r=>`<div class="bench-row"><span class="bench-label">${r.label}</span><span class="bench-val" style="color:${r.color}">${r.val>=0?'+':''}${r.val.toFixed(2)}%</span></div>`).join('');
-  const hist = [...filtered].reverse().slice(0,10).map(p=>{
-    const t=(p.twr*100).toFixed(2),c=parseFloat(t)>=0?'var(--green)':'var(--red)';
-    return `<div class="bench-row"><span style="font-size:11px;color:var(--text3)">${p.data}</span><span style="font-family:var(--mono);font-size:12px;font-weight:600;color:${c}">${parseFloat(t)>=0?'+':''}${t}%</span></div>`;
-  }).join('');
-  return `
-  <div class="card">
-    <div class="perf-hero">
-      <div class="perf-twr" style="color:${tc}">${twr>=0?'+':''}${twr.toFixed(2)}%</div>
-      <div class="perf-sub">Time-Weighted Return · ${filtered.length} giorni</div>
-    </div>
+
+  const modeButtons = `
     <div class="perf-switch">
       <button class="perf-switch-btn ${PERF_MODE==='twr'?'active':''}" onclick="setPerfMode('twr')">📈 TWR %</button>
       <button class="perf-switch-btn ${PERF_MODE==='nav'?'active':''}" onclick="setPerfMode('nav')">💶 NAV €</button>
-    </div>
+      <button class="perf-switch-btn ${PERF_MODE==='tot'?'active':''}" onclick="setPerfMode('tot')">🏦 Totale €</button>
+    </div>`;
+
+  const periodButtons = `
     <div class="period-wrap">
       ${['1S','1M','3M','ALL'].map(p=>`<button class="period-btn ${PERF_PERIOD===p?'active':''}" onclick="setPeriod('${p}')">${p}</button>`).join('')}
+    </div>`;
+
+  if (PERF_MODE === 'twr') {
+    const last = filtered[filtered.length-1];
+    const twr = last.twr*100;
+    const msci = last.msci!==null?last.msci*100:null;
+    const sp = last.sp!==null?last.sp*100:null;
+    const tc = twr>=0?'var(--green)':'var(--red)';
+    const chart = buildTWRChart(filtered);
+    const labels = buildChartLabels(filtered, 'data');
+    const benchRows = [
+      {label:'TWR Cumulato', val:twr, color:tc},
+      msci!==null?{label:'MSCI World', val:msci, color:'var(--blue)'}:null,
+      sp!==null?{label:'S&P 500', val:sp, color:'var(--violet)'}:null,
+      msci!==null?{label:'Active vs MSCI', val:twr-msci, color:twr-msci>=0?'var(--green)':'var(--red)'}:null,
+    ].filter(Boolean).map(r=>`<div class="bench-row"><span class="bench-label">${r.label}</span><span class="bench-val" style="color:${r.color}">${r.val>=0?'+':''}${r.val.toFixed(2)}%</span></div>`).join('');
+    const hist = [...filtered].reverse().slice(0,10).map(p=>{
+      const t=(p.twr*100).toFixed(2),c=parseFloat(t)>=0?'var(--green)':'var(--red)';
+      return `<div class="bench-row"><span style="font-size:11px;color:var(--text3)">${p.data}</span><span style="font-family:var(--mono);font-size:12px;font-weight:600;color:${c}">${parseFloat(t)>=0?'+':''}${t}%</span></div>`;
+    }).join('');
+    return `<div class="card">
+      <div class="perf-hero"><div class="perf-twr" style="color:${tc}">${twr>=0?'+':''}${twr.toFixed(2)}%</div><div class="perf-sub">TWR · ${filtered.length} giorni</div></div>
+      ${modeButtons}${periodButtons}
+      <div class="chart-wrap">${chart}</div>
+      <div class="chart-labels">${labels}</div>
+      <div style="display:flex;gap:14px;margin-top:8px;font-size:10px;color:var(--text3)">
+        <span><span style="color:var(--green)">●</span> TWR</span>
+        ${msci?'<span style="color:var(--blue)">●</span> <span>MSCI</span>':''}
+        ${sp?'<span style="color:var(--violet)">●</span> <span>S&P</span>':''}
+      </div>
     </div>
-    <div class="chart-wrap">${chart}</div>
-    <div class="chart-labels">${labels}</div>
-  </div>
-  <div class="card">${benchRows}</div>
-  <div class="card"><div class="section-title">Storico giornaliero</div>${hist}</div>`;
+    <div class="card">${benchRows}</div>
+    <div class="card"><div class="section-title">Storico giornaliero</div>${hist}</div>`;
+  }
+
+  if (PERF_MODE === 'nav') {
+    const navVals = filtered.map(p=>p.nav).filter(v=>v>0);
+    const last = navVals[navVals.length-1]||0;
+    const first = navVals[0]||0;
+    const change = first > 0 ? ((last-first)/first*100) : 0;
+    const chart = buildNavChart(filtered, 'nav');
+    const labels = buildChartLabels(filtered, 'data');
+    const maxNav = Math.max(...navVals), minNav = Math.min(...navVals);
+    return `<div class="card">
+      <div class="perf-hero">
+        <div class="perf-twr" style="color:var(--blue)">${eur(last)}</div>
+        <div class="perf-sub">NAV Gestito · ${filtered.length} giorni</div>
+      </div>
+      ${modeButtons}${periodButtons}
+      <div class="chart-wrap">${chart}</div>
+      <div class="chart-labels">${labels}</div>
+    </div>
+    <div class="card">
+      <div class="bench-row"><span class="bench-label">Valore attuale</span><span class="bench-val" style="color:var(--text)">${eur(last)}</span></div>
+      <div class="bench-row"><span class="bench-label">Variazione periodo</span><span class="bench-val" style="color:${change>=0?'var(--green)':'var(--red)'}">${change>=0?'+':''}${change.toFixed(2)}%</span></div>
+      <div class="bench-row"><span class="bench-label">Massimo</span><span class="bench-val" style="color:var(--text)">${eur(maxNav)}</span></div>
+      <div class="bench-row"><span class="bench-label">Minimo</span><span class="bench-val" style="color:var(--text)">${eur(minNav)}</span></div>
+    </div>`;
+  }
+
+  if (PERF_MODE === 'tot') {
+    const o = DATA.overview || {};
+    const navTotale = o.navTotale || 0;
+    const chart = buildNavChart(filtered, 'nav', true);
+    const labels = buildChartLabels(filtered, 'data');
+    return `<div class="card">
+      <div class="perf-hero">
+        <div class="perf-twr" style="color:var(--violet)">${eur(navTotale)}</div>
+        <div class="perf-sub">Patrimonio Totale · oggi</div>
+      </div>
+      ${modeButtons}${periodButtons}
+      <div class="chart-wrap">${chart}</div>
+      <div class="chart-labels">${labels}</div>
+    </div>
+    <div class="card">
+      <div class="bench-row"><span class="bench-label">Gestito</span><span class="bench-val" style="color:var(--green)">${eur(o.navGestito)}</span></div>
+      <div class="bench-row"><span class="bench-label">Stabile (pensioni)</span><span class="bench-val" style="color:var(--violet)">${eur(o.navStabile)}</span></div>
+      <div class="bench-row"><span class="bench-label">Liquidità totale</span><span class="bench-val" style="color:var(--text)">${eur(o.cashTotale)}</span></div>
+    </div>`;
+  }
 }
 
 function filterPerf(perf) {
@@ -266,86 +308,184 @@ function filterPerf(perf) {
 function setPerfMode(m) { PERF_MODE = m; renderTab('performance'); }
 function setPeriod(p) { PERF_PERIOD = p; renderTab('performance'); }
 
-function buildPerfChart(perf) {
-  const W=320,H=110,PAD=8;
-  const tv=perf.map(p=>p.twr*100),mv=perf.map(p=>p.msci!==null?p.msci*100:null).filter(v=>v!==null);
-  const all=[...tv,...mv];
-  const minV=Math.min(...all)-0.2,maxV=Math.max(...all)+0.2,rng=maxV-minV||1;
-  function pts(arr){return arr.map((v,i)=>{const x=PAD+(i/Math.max(arr.length-1,1))*(W-PAD*2),y=H-PAD-((v-minV)/rng)*(H-PAD*2);return `${x.toFixed(1)},${y.toFixed(1)}`;}).join(' ');}
-  const zY=H-PAD-((0-minV)/rng)*(H-PAD*2);
-  const li=tv.length-1,lx=PAD+(li/Math.max(tv.length-1,1))*(W-PAD*2),ly=H-PAD-((tv[li]-minV)/rng)*(H-PAD*2);
-  const areaPath=`M ${PAD},${zY.toFixed(1)} ${tv.map((v,i)=>{const x=PAD+(i/Math.max(tv.length-1,1))*(W-PAD*2),y=H-PAD-((v-minV)/rng)*(H-PAD*2);return `L ${x.toFixed(1)},${y.toFixed(1)}`;}).join(' ')} L ${(W-PAD).toFixed(1)},${zY.toFixed(1)} Z`;
+function buildChartLabels(data, key) {
+  return data.filter((_,i)=>i%Math.max(1,Math.floor(data.length/5))===0)
+    .map(p=>`<span class="chart-label">${p[key]}</span>`).join('');
+}
+
+function buildTWRChart(perf) {
+  const W=320, H=130, PAD_L=42, PAD_R=10, PAD_T=12, PAD_B=8;
+  const tv = perf.map(p=>p.twr*100);
+  const mv = perf.map(p=>p.msci!==null?p.msci*100:null).filter(v=>v!==null);
+  const sv = perf.map(p=>p.sp!==null?p.sp*100:null).filter(v=>v!==null);
+  const all = [...tv,...mv,...sv];
+  const minV = Math.min(...all)-0.3, maxV = Math.max(...all)+0.3, rng = maxV-minV||1;
+  const cW = W-PAD_L-PAD_R, cH = H-PAD_T-PAD_B;
+
+  function xPos(i, len) { return PAD_L + (i/Math.max(len-1,1))*cW; }
+  function yPos(v) { return PAD_T + cH - ((v-minV)/rng)*cH; }
+  function pts(arr) { return arr.map((v,i)=>`${xPos(i,arr.length).toFixed(1)},${yPos(v).toFixed(1)}`).join(' '); }
+
+  // Y axis ticks
+  const tickCount = 5;
+  const ticks = Array.from({length:tickCount}, (_,i) => minV + (rng/(tickCount-1))*i);
+  let yAxis = '';
+  ticks.forEach(t => {
+    const y = yPos(t).toFixed(1);
+    yAxis += `<line x1="${PAD_L}" y1="${y}" x2="${W-PAD_R}" y2="${y}" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>`;
+    yAxis += `<text x="${PAD_L-4}" y="${y}" text-anchor="end" dominant-baseline="middle" font-size="8" fill="var(--text4)">${t>=0?'+':''}${t.toFixed(1)}%</text>`;
+  });
+
+  // Zero line
+  const zY = yPos(0).toFixed(1);
+  const areaPath = `M ${PAD_L},${zY} ${tv.map((v,i)=>`L ${xPos(i,tv.length).toFixed(1)},${yPos(v).toFixed(1)}`).join(' ')} L ${(PAD_L+cW).toFixed(1)},${zY} Z`;
+  const li = tv.length-1;
+  const lx = xPos(li, tv.length).toFixed(1), ly = yPos(tv[li]).toFixed(1);
+
   return `<svg class="chart" viewBox="0 0 ${W} ${H}">
-    <defs><linearGradient id="ag" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--green)" stop-opacity="0.2"/><stop offset="100%" stop-color="var(--green)" stop-opacity="0"/></linearGradient></defs>
-    <line x1="${PAD}" y1="${zY.toFixed(1)}" x2="${W-PAD}" y2="${zY.toFixed(1)}" stroke="rgba(255,255,255,0.08)" stroke-width="1" stroke-dasharray="3,3"/>
+    <defs>
+      <linearGradient id="ag" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="var(--green)" stop-opacity="0.25"/>
+        <stop offset="100%" stop-color="var(--green)" stop-opacity="0"/>
+      </linearGradient>
+    </defs>
+    ${yAxis}
+    <line x1="${PAD_L}" y1="${zY}" x2="${W-PAD_R}" y2="${zY}" stroke="rgba(255,255,255,0.12)" stroke-width="1" stroke-dasharray="3,3"/>
     <path d="${areaPath}" fill="url(#ag)"/>
-    ${mv.length>1?`<polyline points="${pts(mv)}" fill="none" stroke="var(--blue)" stroke-width="1.5" stroke-opacity="0.5" stroke-dasharray="4,2"/>`:''}
+    ${sv.length>1?`<polyline points="${pts(sv)}" fill="none" stroke="var(--violet)" stroke-width="1.5" stroke-opacity="0.6" stroke-dasharray="4,2"/>`:''}
+    ${mv.length>1?`<polyline points="${pts(mv)}" fill="none" stroke="var(--blue)" stroke-width="1.5" stroke-opacity="0.6" stroke-dasharray="4,2"/>`:''}
     <polyline points="${pts(tv)}" fill="none" stroke="var(--green)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-    <circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="4" fill="var(--green)"/>
+    <circle cx="${lx}" cy="${ly}" r="4" fill="var(--green)"/>
   </svg>`;
 }
 
-function buildNavChart(perf) {
-  const W=320,H=110,PAD=8;
-  const navV=perf.map(p=>p.nav).filter(v=>v>0);
-  if (!navV.length) return '<div class="empty">NAV non disponibile</div>';
-  const minV=Math.min(...navV)*0.995,maxV=Math.max(...navV)*1.005,rng=maxV-minV||1;
-  const pts=navV.map((v,i)=>{const x=PAD+(i/Math.max(navV.length-1,1))*(W-PAD*2),y=H-PAD-((v-minV)/rng)*(H-PAD*2);return `${x.toFixed(1)},${y.toFixed(1)}`;}).join(' ');
-  const li=navV.length-1,lx=PAD+(li/Math.max(navV.length-1,1))*(W-PAD*2),ly=H-PAD-((navV[li]-minV)/rng)*(H-PAD*2);
-  const areaPath=`M ${PAD},${(H-PAD).toFixed(1)} ${navV.map((v,i)=>{const x=PAD+(i/Math.max(navV.length-1,1))*(W-PAD*2),y=H-PAD-((v-minV)/rng)*(H-PAD*2);return `L ${x.toFixed(1)},${y.toFixed(1)}`;}).join(' ')} L ${(W-PAD).toFixed(1)},${(H-PAD).toFixed(1)} Z`;
+function buildNavChart(perf, key, violet=false) {
+  const W=320, H=130, PAD_L=52, PAD_R=10, PAD_T=12, PAD_B=8;
+  const vals = perf.map(p=>p[key]||0).filter(v=>v>0);
+  if (!vals.length) return '<div class="empty">Dati non disponibili</div>';
+  const minV = Math.min(...vals)*0.995, maxV = Math.max(...vals)*1.005, rng = maxV-minV||1;
+  const cW = W-PAD_L-PAD_R, cH = H-PAD_T-PAD_B;
+  const strokeColor = violet ? 'var(--violet)' : 'var(--blue)';
+  const fillColor = violet ? 'var(--violet)' : 'var(--blue)';
+
+  function xPos(i, len) { return PAD_L + (i/Math.max(len-1,1))*cW; }
+  function yPos(v) { return PAD_T + cH - ((v-minV)/rng)*cH; }
+  function pts(arr) { return arr.map((v,i)=>`${xPos(i,arr.length).toFixed(1)},${yPos(v).toFixed(1)}`).join(' '); }
+
+  // Y axis ticks
+  const tickCount = 4;
+  const ticks = Array.from({length:tickCount}, (_,i) => minV + (rng/(tickCount-1))*i);
+  let yAxis = '';
+  ticks.forEach(t => {
+    const y = yPos(t).toFixed(1);
+    const label = t >= 1000 ? `${(t/1000).toFixed(0)}k` : eur(t,0).replace('€','').trim();
+    yAxis += `<line x1="${PAD_L}" y1="${y}" x2="${W-PAD_R}" y2="${y}" stroke="rgba(255,255,255,0.05)" stroke-width="1"/>`;
+    yAxis += `<text x="${PAD_L-4}" y="${y}" text-anchor="end" dominant-baseline="middle" font-size="8" fill="var(--text4)">${label}</text>`;
+  });
+
+  const li = vals.length-1;
+  const lx = xPos(li, vals.length).toFixed(1), ly = yPos(vals[li]).toFixed(1);
+  const bottomY = (PAD_T+cH).toFixed(1);
+  const areaPath = `M ${PAD_L},${bottomY} ${vals.map((v,i)=>`L ${xPos(i,vals.length).toFixed(1)},${yPos(v).toFixed(1)}`).join(' ')} L ${(PAD_L+cW).toFixed(1)},${bottomY} Z`;
+
   return `<svg class="chart" viewBox="0 0 ${W} ${H}">
-    <defs><linearGradient id="ng" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--blue)" stop-opacity="0.2"/><stop offset="100%" stop-color="var(--blue)" stop-opacity="0"/></linearGradient></defs>
+    <defs>
+      <linearGradient id="ng" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stop-color="${fillColor}" stop-opacity="0.25"/>
+        <stop offset="100%" stop-color="${fillColor}" stop-opacity="0"/>
+      </linearGradient>
+    </defs>
+    ${yAxis}
     <path d="${areaPath}" fill="url(#ng)"/>
-    <polyline points="${pts}" fill="none" stroke="var(--blue)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
-    <circle cx="${lx.toFixed(1)}" cy="${ly.toFixed(1)}" r="4" fill="var(--blue)"/>
+    <polyline points="${pts(vals)}" fill="none" stroke="${strokeColor}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="${lx}" cy="${ly}" r="4" fill="${strokeColor}"/>
   </svg>`;
 }
 
-// ═══════ POSIZIONI — stile tabella con espansione ═══════
+// ═══════════════════════════════════════════════════════════
+// POSIZIONI — tabella ordinabile con espansione
+// ═══════════════════════════════════════════════════════════
 function posizioni() {
-  const pos=DATA.posizioni||[];
+  const pos = DATA.posizioni||[];
   if (!pos.length) return '<div class="empty">Nessuna posizione aperta.</div>';
-  const sorted=[...pos].sort((a,b)=>(b.mv||0)-(a.mv||0));
-  const tot=sorted.reduce((s,p)=>s+(p.mv||0),0);
-  const rows=sorted.map((p,i)=>{
-    const c=AC_COLOR[p.ac]||'#888',bg=AC_BG[p.ac]||'#1e293b';
-    const pp=rawPct(p.pnlPct),pc=pp>=0?'var(--green)':'var(--red)';
-    const bw=tot>0?Math.min((p.mv/tot)*100,100):0;
+
+  const sorted = [...pos].sort((a,b) => {
+    let va = a[POS_SORT.col], vb = b[POS_SORT.col];
+    if (typeof va === 'string') va=va.toLowerCase(), vb=vb.toLowerCase();
+    va = va||0; vb = vb||0;
+    return POS_SORT.dir * (va>vb?1:va<vb?-1:0);
+  });
+
+  const tot = sorted.reduce((s,p)=>s+(p.mv||0),0);
+
+  function th(label, colKey) {
+    const active = POS_SORT.col === colKey;
+    const arrow = active ? (POS_SORT.dir===1?'↑':'↓') : '';
+    const align = colKey === 'ticker' ? 'left' : 'right';
+    return `<th class="${active?'sort-active':''}" style="text-align:${align}" onclick="sortPos('${colKey}')">${label}${arrow?` ${arrow}`:''}</th>`;
+  }
+
+  const rows = sorted.map(p => {
+    const c = AC_COLOR[p.ac]||'#888', bg = AC_BG[p.ac]||'#1e293b';
+    const pp = rawPct(p.pnlPct), pc = pp>=0?'var(--green)':'var(--red)';
+    const bw = tot>0?Math.min((p.mv/tot)*100,100):0;
     const isOpen = EXPANDED_POS === p.ticker;
-    const detail = isOpen ? `
-      <div style="background:var(--surface2);border-radius:var(--radius-xs);padding:12px;margin:0 -8px 8px;animation:fadeIn 0.2s ease">
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-          <div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Market Value</div><div style="font-size:14px;font-weight:700;font-family:var(--mono);margin-top:2px">${eur(p.mv)}</div></div>
-          <div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:0.5px">P&L €</div><div style="font-size:14px;font-weight:700;font-family:var(--mono);color:${pc};margin-top:2px">${pp>=0?'+':''}${eur(p.pnlEur)}</div></div>
-          <div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Peso ptf</div><div style="font-size:14px;font-weight:700;font-family:var(--mono);margin-top:2px">${bw.toFixed(1)}%</div></div>
-          <div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Prezzo</div><div style="font-size:14px;font-weight:700;font-family:var(--mono);margin-top:2px">${eur(p.price,2)}</div></div>
-          <div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Valuta</div><div style="font-size:14px;font-weight:700;margin-top:2px">${p.currency}</div></div>
-          <div><div style="font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:0.5px">Asset Class</div><div style="margin-top:4px"><span class="badge" style="background:${bg};color:${c}">${p.ac}</span></div></div>
+
+    const detailRow = isOpen ? `<tr class="pos-detail-row">
+      <td colspan="3" style="padding:0 0 8px">
+        <div style="background:rgba(64,144,255,0.07);border:1px solid rgba(64,144,255,0.2);border-radius:var(--radius-sm);padding:14px 16px;animation:fadeIn 0.2s ease">
+          <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px 16px;margin-bottom:12px">
+            <div>
+              <div style="font-size:9px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:3px">Market Value</div>
+              <div style="font-size:15px;font-weight:700;font-family:var(--mono)">${eur(p.mv)}</div>
+            </div>
+            <div>
+              <div style="font-size:9px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:3px">P&L €</div>
+              <div style="font-size:15px;font-weight:700;font-family:var(--mono);color:${pc}">${pp>=0?'+':''}${eur(p.pnlEur)}</div>
+            </div>
+            <div>
+              <div style="font-size:9px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:3px">Peso ptf</div>
+              <div style="font-size:15px;font-weight:700;font-family:var(--mono)">${bw.toFixed(1)}%</div>
+            </div>
+            <div>
+              <div style="font-size:9px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:3px">Prezzo</div>
+              <div style="font-size:15px;font-weight:700;font-family:var(--mono)">${eur(p.price,2)}</div>
+            </div>
+            <div>
+              <div style="font-size:9px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:3px">Valuta</div>
+              <div style="font-size:15px;font-weight:700">${p.currency}</div>
+            </div>
+            <div>
+              <div style="font-size:9px;color:var(--text3);font-weight:700;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:3px">Asset Class</div>
+              <div style="margin-top:2px"><span class="badge" style="background:${bg};color:${c};font-size:10px;padding:3px 8px">${p.ac}</span></div>
+            </div>
+          </div>
+          <div style="height:5px;background:var(--surface3);border-radius:3px">
+            <div style="height:100%;width:${bw.toFixed(1)}%;background:${c};border-radius:3px;transition:width 0.6s"></div>
+          </div>
         </div>
-        <div style="height:4px;background:var(--surface3);border-radius:2px;margin-top:12px">
-          <div style="height:100%;width:${bw.toFixed(1)}%;background:${c};border-radius:2px"></div>
-        </div>
-      </div>` : '';
-    return `<tr onclick="togglePos('${p.ticker}')" style="cursor:pointer">
+      </td>
+    </tr>` : '';
+
+    return `<tr onclick="togglePos('${p.ticker}')" style="cursor:pointer" class="${isOpen?'pos-row-open':''}">
       <td>
         <div style="display:flex;align-items:center;gap:10px">
           <div style="width:36px;height:36px;border-radius:9px;background:${bg};color:${c};display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;flex-shrink:0;font-family:var(--mono)">${p.ticker.split('.')[0].slice(0,3)}</div>
           <div style="min-width:0">
             <div style="font-size:13px;font-weight:700;color:var(--text)">${p.ticker}</div>
-            <div style="font-size:10px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:120px">${p.nome}</div>
-            ${isOpen ? detail : ''}
+            <div style="font-size:10px;color:var(--text3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:110px">${p.nome}</div>
           </div>
         </div>
       </td>
       <td class="num">${eur(p.mv)}</td>
       <td class="pct" style="color:${pc}">${pp>=0?'+':''}${pp.toFixed(2)}%</td>
-    </tr>`;
+    </tr>${detailRow}`;
   }).join('');
-  function th(label) { return `<th style="text-align:${label==='Titolo'?'left':'right'}">${label}</th>`; }
-  return `<div class="card" style="overflow-x:auto">
-    <div class="section-title">◆ ${pos.length} Posizioni aperte · ${eur(tot)} gestito</div>
+
+  return `<div class="card">
+    <div class="section-title">◆ ${pos.length} Posizioni · ${eur(tot)} gestito</div>
     <table class="trx-table">
-      <thead><tr>${th('Titolo')}${th('Valore')}${th('P&L %')}</tr></thead>
+      <thead><tr>${th('Titolo','ticker')}${th('Valore','mv')}${th('P&L %','pnlPct')}</tr></thead>
       <tbody>${rows}</tbody>
     </table>
   </div>`;
@@ -355,45 +495,101 @@ function togglePos(ticker) {
   EXPANDED_POS = EXPANDED_POS === ticker ? null : ticker;
   renderTab('posizioni');
 }
-
-// ═══════ MANDATE ═══════
-function mandate() {
-  const m=DATA.mandate||[];
-  if (!m.length) return '<div class="empty">Nessun dato mandate.</div>';
-  const rows=m.map(row=>{
-    const cur=typeof row.current==='number'?row.current:0,tgt=typeof row.target==='number'?row.target:0;
-    const min=typeof row.min==='number'?row.min:0,max=typeof row.max==='number'?row.max:1;
-    const drift=cur-tgt,bw=Math.min(cur*100,100),tw=Math.min(tgt*100,100);
-    const minW=Math.min(min*100,100),maxW=Math.min(max*100,100);
-    const sc=row.status==='OK'?'var(--green)':row.status&&row.status.includes('SOTTO')?'var(--red)':'var(--amber)';
-    const scBg=row.status==='OK'?'rgba(24,217,139,0.12)':row.status&&row.status.includes('SOTTO')?'rgba(255,77,106,0.12)':'rgba(255,179,64,0.12)';
-    const fc=AC_COLOR[row.label]||'var(--blue)';
-    const ds=drift>=0?`+${(drift*100).toFixed(1)}%`:`${(drift*100).toFixed(1)}%`;
-    const dc=Math.abs(drift)>0.05?(drift>0?'var(--amber)':'var(--blue)'):'var(--text3)';
-    return `<div class="mandate-row">
-      <div class="mandate-top">
-        <span class="mandate-label" style="color:${fc}">${row.label}</span>
-        <span class="mandate-status" style="background:${scBg};color:${sc}">${row.status||'OK'}</span>
-      </div>
-      <div class="bar-track" style="height:8px">
-        <div style="position:absolute;left:${minW.toFixed(1)}%;width:${(maxW-minW).toFixed(1)}%;height:100%;background:rgba(255,255,255,0.06);border-radius:3px"></div>
-        <div class="bar-fill" style="width:${bw.toFixed(1)}%;background:${fc}"></div>
-        <div class="bar-target" style="left:${tw.toFixed(1)}%;width:3px;background:white;opacity:0.8"></div>
-      </div>
-      <div class="mandate-nums">
-        <span>Attuale: <b>${(cur*100).toFixed(1)}%</b></span>
-        <span>Target: <b>${(tgt*100).toFixed(0)}%</b></span>
-        <span style="color:${dc}">Drift: <b>${ds}</b></span>
-      </div>
-      <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text4);margin-top:4px">
-        <span>Min ${(min*100).toFixed(0)}%</span><span>Max ${(max*100).toFixed(0)}%</span>
-      </div>
-    </div>`;
-  }).join('');
-  return `<div class="section-title">⊞ Allocazione Mandate</div>${rows}`;
+function sortPos(col) {
+  if (POS_SORT.col === col) POS_SORT.dir *= -1;
+  else { POS_SORT.col = col; POS_SORT.dir = -1; }
+  renderTab('posizioni');
 }
 
-// ═══════ TRANSACTIONS ═══════
+// ═══════════════════════════════════════════════════════════
+// MANDATE — sezioni collassabili
+// ═══════════════════════════════════════════════════════════
+function mandate() {
+  const m = DATA.mandate||[];
+  if (!m.length) return '<div class="empty">Nessun dato mandate.</div>';
+
+  // Raggruppa per sezione
+  let html = '';
+  const sectionColors = {
+    'L1 — Asset Class': '#4090ff',
+    'L2 — Geografia': '#18d98b',
+    'L3 — Settori': '#9b6dff',
+    'L4 — Valuta': '#ffb340',
+  };
+
+  Object.entries(MANDATE_SECTIONS).forEach(([sectionName, labels]) => {
+    const rows = m.filter(row => labels.includes(row.label));
+    if (!rows.length) return;
+    const isOpen = MANDATE_OPEN[sectionName];
+    const ok = rows.filter(r=>r.status==='OK').length;
+    const total = rows.length;
+    const allOk = ok === total;
+    const sColor = sectionColors[sectionName] || 'var(--blue)';
+
+    html += `<div class="mandate-section" style="margin-bottom:10px">
+      <div onclick="toggleMandate('${sectionName}')" style="display:flex;justify-content:space-between;align-items:center;padding:13px 16px;background:var(--surface);border:1px solid var(--border);border-radius:${isOpen?'var(--radius-sm) var(--radius-sm) 0 0':'var(--radius-sm)'};cursor:pointer">
+        <div style="display:flex;align-items:center;gap:10px">
+          <div style="width:3px;height:20px;background:${sColor};border-radius:2px"></div>
+          <span style="font-size:13px;font-weight:700;color:var(--text)">${sectionName}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px">
+          <span style="font-size:11px;color:${allOk?'var(--green)':'var(--amber)'};font-weight:600">${ok}/${total} OK</span>
+          <span style="color:var(--text3);font-size:14px;transition:transform 0.2s;transform:rotate(${isOpen?'180':'0'}deg)">▾</span>
+        </div>
+      </div>
+      ${isOpen ? `<div style="border:1px solid var(--border);border-top:none;border-radius:0 0 var(--radius-sm) var(--radius-sm);overflow:hidden">
+        ${rows.map((row,i) => buildMandateRow(row, i, rows.length)).join('')}
+      </div>` : ''}
+    </div>`;
+  });
+
+  return html;
+}
+
+function buildMandateRow(row, i, total) {
+  const cur=typeof row.current==='number'?row.current:0;
+  const tgt=typeof row.target==='number'?row.target:0;
+  const min=typeof row.min==='number'?row.min:0;
+  const max=typeof row.max==='number'?row.max:1;
+  const drift=cur-tgt;
+  const bw=Math.min(cur*100,100), tw=Math.min(tgt*100,100);
+  const minW=Math.min(min*100,100), maxW=Math.min(max*100,100);
+  const sc=row.status==='OK'?'var(--green)':row.status&&row.status.includes('SOTTO')?'var(--red)':'var(--amber)';
+  const scBg=row.status==='OK'?'rgba(24,217,139,0.12)':row.status&&row.status.includes('SOTTO')?'rgba(255,77,106,0.12)':'rgba(255,179,64,0.12)';
+  const fc=AC_COLOR[row.label]||'var(--blue)';
+  const ds=drift>=0?`+${(drift*100).toFixed(1)}%`:`${(drift*100).toFixed(1)}%`;
+  const dc=Math.abs(drift)>0.05?(drift>0?'var(--amber)':'var(--blue)'):'var(--text3)';
+  const isLast = i === total - 1;
+
+  return `<div style="padding:14px 16px;${!isLast?'border-bottom:1px solid var(--border)':''}">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <span style="font-size:13px;font-weight:700;color:var(--text)">${row.label}</span>
+      <span style="font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;background:${scBg};color:${sc}">${row.status||'OK'}</span>
+    </div>
+    <div style="height:8px;background:var(--surface2);border-radius:4px;position:relative;overflow:hidden;margin-bottom:8px">
+      <div style="position:absolute;left:${minW.toFixed(1)}%;width:${(maxW-minW).toFixed(1)}%;height:100%;background:rgba(255,255,255,0.07)"></div>
+      <div style="height:100%;width:${bw.toFixed(1)}%;background:${fc};border-radius:4px;transition:width 0.8s"></div>
+      <div style="position:absolute;top:-2px;bottom:-2px;left:${tw.toFixed(1)}%;width:3px;background:rgba(255,255,255,0.8);border-radius:2px"></div>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--text3)">
+      <span>Attuale: <b style="color:var(--text2)">${(cur*100).toFixed(1)}%</b></span>
+      <span>Target: <b style="color:var(--text2)">${(tgt*100).toFixed(0)}%</b></span>
+      <span style="color:${dc}">Drift: <b>${ds}</b></span>
+    </div>
+    <div style="display:flex;justify-content:space-between;font-size:9px;color:var(--text4);margin-top:4px">
+      <span>Min ${(min*100).toFixed(0)}%</span><span>Max ${(max*100).toFixed(0)}%</span>
+    </div>
+  </div>`;
+}
+
+function toggleMandate(name) {
+  MANDATE_OPEN[name] = !MANDATE_OPEN[name];
+  renderTab('mandate');
+}
+
+// ═══════════════════════════════════════════════════════════
+// TRANSACTIONS
+// ═══════════════════════════════════════════════════════════
 function transactions() {
   const trx=DATA.transactions||[];
   if (!trx.length) return '<div class="empty">Nessuna transazione trovata.</div>';
@@ -401,12 +597,13 @@ function transactions() {
   const sorted=[...trx].sort((a,b)=>{
     let va=a[TRX_SORT.col]||0,vb=b[TRX_SORT.col]||0;
     if (typeof va==='string') va=va.toLowerCase(),vb=vb.toLowerCase();
-    return TRX_SORT.dir * (va>vb?1:va<vb?-1:0);
+    return TRX_SORT.dir*(va>vb?1:va<vb?-1:0);
   });
   function th(label,colKey) {
     const active=TRX_SORT.col===colKey;
     const arrow=active?(TRX_SORT.dir===1?'↑':'↓'):'';
-    return `<th class="${active?'sort-active':''}" onclick="sortTrx('${colKey}')">${label} ${arrow}</th>`;
+    const align=colKey==='ticker'?'left':'right';
+    return `<th class="${active?'sort-active':''}" style="text-align:${align}" onclick="sortTrx('${colKey}')">${label}${arrow?` ${arrow}`:''}</th>`;
   }
   const rows=sorted.map(t=>{
     const isBuy=t.tipo==='BUY'||t.tipo==='PAC',isSell=t.tipo==='SELL';
@@ -433,14 +630,15 @@ function transactions() {
     </table>
   </div>`;
 }
-
 function sortTrx(col) {
-  if (TRX_SORT.col === col) TRX_SORT.dir *= -1;
-  else { TRX_SORT.col = col; TRX_SORT.dir = -1; }
+  if (TRX_SORT.col===col) TRX_SORT.dir*=-1;
+  else { TRX_SORT.col=col; TRX_SORT.dir=-1; }
   renderTab('transactions');
 }
 
-// ═══════ SIMULATORE ═══════
+// ═══════════════════════════════════════════════════════════
+// SIMULATORE
+// ═══════════════════════════════════════════════════════════
 function simulatore() {
   const cap=(DATA.overview&&DATA.overview.navGestito)||21000;
   return `
@@ -485,7 +683,9 @@ function updateSim() {
     <polyline points="${pts(sO)}" fill="none" stroke="var(--green)" stroke-width="1.5" stroke-opacity="0.6" stroke-dasharray="4,2"/>`;
 }
 
-// ═══════ FORM ═══════
+// ═══════════════════════════════════════════════════════════
+// FORM NUOVA OPERAZIONE
+// ═══════════════════════════════════════════════════════════
 function openForm() { document.getElementById('modal-overlay').classList.add('open'); document.getElementById('modal-form').classList.add('open'); document.getElementById('f-ticker').focus(); }
 function closeForm() { document.getElementById('modal-overlay').classList.remove('open'); document.getElementById('modal-form').classList.remove('open'); }
 function setTipo(tipo, btn) { FORM_TIPO=tipo; document.querySelectorAll('.radio-btn').forEach(b=>b.classList.remove('active')); btn.classList.add('active'); updateFormSummary(); }
