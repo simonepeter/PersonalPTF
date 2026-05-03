@@ -1,5 +1,5 @@
 // PersonalPTF app.js v2.0
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxTPblW_RCgHALEkuvNUW6e659vpHRIBxrDTmLekf-EC_GIBeuOlb6eIrbv925b1AonYQ/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwokJEIFatJ0Zz_T0iBrvgav4hegErxZ2WZQOB3sITO-J9i_ZL1NQ4WmGvPIXrEeTJnUg/exec';
 const AC_COLOR = { ETF:'#4090ff', Azioni:'#9b6dff', Crypto:'#ffb340', Cash:'#18d98b', Fondi:'#00d4ff' };
 const AC_BG    = { ETF:'#0f2450', Azioni:'#1e1040', Crypto:'#3a2000', Cash:'#063325', Fondi:'#003340' };
 let DATA = null, CURRENT_TAB = 'overview', FORM_TIPO = 'BUY';
