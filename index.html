@@ -16,8 +16,6 @@
 </head>
 <body>
 <div id="app">
-
-  <!-- TOP BAR -->
   <div id="topbar">
     <div class="logo">
       <div class="logo-mark">P</div>
@@ -30,8 +28,6 @@
       <span class="update-time" id="update-time">--</span>
     </div>
   </div>
-
-  <!-- MAIN CONTENT -->
   <div id="content">
     <div class="loading" id="loading">
       <div class="spinner"></div>
@@ -39,36 +35,26 @@
     </div>
     <div id="page-content" style="display:none"></div>
   </div>
-
-  <!-- BOTTOM NAV -->
   <nav id="navbar">
     <button class="nav-item active" onclick="setTab('overview')" id="tab-overview">
-      <span class="nav-icon">◈</span>
-      <span class="nav-label">Home</span>
+      <span class="nav-icon">◈</span><span class="nav-label">Home</span>
     </button>
     <button class="nav-item" onclick="setTab('performance')" id="tab-performance">
-      <span class="nav-icon">↗</span>
-      <span class="nav-label">Perf</span>
+      <span class="nav-icon">↗</span><span class="nav-label">Perf</span>
     </button>
     <button class="nav-item" onclick="setTab('posizioni')" id="tab-posizioni">
-      <span class="nav-icon">◆</span>
-      <span class="nav-label">Posizioni</span>
+      <span class="nav-icon">◆</span><span class="nav-label">Posizioni</span>
     </button>
     <button class="nav-item" onclick="setTab('mandate')" id="tab-mandate">
-      <span class="nav-icon">⊞</span>
-      <span class="nav-label">Mandate</span>
+      <span class="nav-icon">⊞</span><span class="nav-label">Mandate</span>
+    </button>
+    <button class="nav-item" onclick="setTab('news')" id="tab-news">
+      <span class="nav-icon">📰</span><span class="nav-label">News</span>
     </button>
     <button class="nav-item" onclick="setTab('transactions')" id="tab-transactions">
-      <span class="nav-icon">≡</span>
-      <span class="nav-label">Transazioni</span>
-    </button>
-    <button class="nav-item" onclick="setTab('simulatore')" id="tab-simulatore">
-      <span class="nav-icon">◉</span>
-      <span class="nav-label">Sim</span>
+      <span class="nav-icon">≡</span><span class="nav-label">Ops</span>
     </button>
   </nav>
-
-  <!-- MODAL NUOVA OPERAZIONE -->
   <div class="modal-overlay" id="modal-overlay" onclick="closeForm()"></div>
   <div class="modal" id="modal-form">
     <div class="modal-header">
@@ -124,18 +110,10 @@
         <input type="text" id="f-note" placeholder="opzionale">
       </div>
       <div class="form-summary" id="form-summary"></div>
-      <button class="btn-primary" onclick="submitForm()" id="submit-btn">
-        Conferma operazione
-      </button>
+      <button class="btn-primary" onclick="submitForm()" id="submit-btn">Conferma operazione</button>
     </div>
   </div>
-
 </div>
-  <script>
-  if('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('/sw.js');
-  }
-</script>
 <script src="app.js"></script>
 </body>
 </html>
