@@ -1,5 +1,6 @@
+
 // PersonalPTF app.js v2.3
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxp9jj8XCDsZa89h9eplXyyWndNJHgy6U3GGkVd8ThJrPiCNx6D1xV2EZn7U1XVFmirDA/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxTPblW_RCgHALEkuvNUW6e659vpHRIBxrDTmLekf-EC_GIBeuOlb6eIrbv925b1AonYQ/exec';
 const AC_COLOR = { ETF:'#4090ff', Azioni:'#9b6dff', Crypto:'#ffb340', Cash:'#18d98b', Fondi:'#00d4ff' };
 const AC_BG    = { ETF:'#0f2450', Azioni:'#1e1040', Crypto:'#3a2000', Cash:'#063325', Fondi:'#003340' };
 
@@ -52,9 +53,10 @@ function setTab(tab) {
 
 function renderTab(tab) {
   const el = document.getElementById('page-content');
-  const map = { overview, performance, posizioni, mandate, transactions, simulatore };
+  const map = { overview, performance, posizioni, mandate, transactions, simulatore, news };
   el.innerHTML = (map[tab] || (() => '<div class="empty">In costruzione</div>'))();
   if (tab === 'simulatore') updateSim();
+  if (tab === 'news') setTimeout(() => loadNews(), 50);
 }
 
 function eur(n, dec=0) { if (typeof n !== 'number' || isNaN(n)) return '—'; return new Intl.NumberFormat('it-IT',{style:'currency',currency:'EUR',maximumFractionDigits:dec}).format(n); }
@@ -597,4 +599,273 @@ async function submitForm(){
     btn.classList.remove('loading');btn.classList.add('error');btn.textContent='✕ Errore';
     setTimeout(()=>{btn.classList.remove('error');btn.textContent='Conferma operazione';},2000);
   }
+}
+
+// ═══════════════════════════════════════════════════════════
+// NEWS SECTION — Finnhub API + Sentiment Bars
+// ═══════════════════════════════════════════════════════════
+
+const FINNHUB_KEY = 'd81okapr01qrojfci26gd81okapr01qrojfci270';
+
+// Mapping ticker portafoglio → simbolo Finnhub
+const NEWS_TICKERS = {
+  'AMZN':    { sym: 'AMZN',  label: 'Amazon',   type: 'stock' },
+  'SPOT':    { sym: 'SPOT',  label: 'Spotify',  type: 'stock' },
+  'FISV':    { sym: 'FISV',  label: 'Fiserv',   type: 'stock' },
+  'GRAB':    { sym: 'GRAB',  label: 'Grab',     type: 'stock' },
+  'BABA':    { sym: 'BABA',  label: 'Alibaba',  type: 'stock' },
+  'SWDA.MI': { sym: 'IWDA',  label: 'MSCI World', type: 'etf' },
+  'AEME.PA': { sym: 'EEM',   label: 'Emerging', type: 'etf' },
+  'SGLD.MI': { sym: 'GLD',   label: 'Gold ETC', type: 'etf' },
+  'VDIV':    { sym: 'VDIV',  label: 'Dividendi EU', type: 'etf' },
+  'LGCW':    { sym: 'PHO',   label: 'Water ETF', type: 'etf' },
+  'XRP':     { sym: 'BINANCE:XRPUSDT', label: 'XRP', type: 'crypto' },
+};
+
+// Macro categories
+const MACRO_CATEGORIES = ['general','forex','merger'];
+
+let NEWS_TAB = 'macro'; // 'macro' | 'portfolio'
+let NEWS_TICKER = null; // ticker selezionato
+let NEWS_CACHE = {}; // cache per evitare chiamate duplicate
+let NEWS_OPEN = null; // news espansa
+
+function news() {
+  return `
+  <div style="display:flex;gap:0;margin-bottom:14px;background:var(--surface2);border-radius:var(--radius-sm);padding:3px">
+    <button class="perf-switch-btn ${NEWS_TAB==='macro'?'active':''}" onclick="setNewsTab('macro')">🌍 Macro</button>
+    <button class="perf-switch-btn ${NEWS_TAB==='portfolio'?'active':''}" onclick="setNewsTab('portfolio')">📊 Portfolio</button>
+  </div>
+  <div id="news-content">
+    <div class="loading" style="height:40vh"><div class="spinner"></div><span>Caricamento news...</span></div>
+  </div>`;
+}
+
+function setNewsTab(tab) {
+  NEWS_TAB = tab;
+  NEWS_TICKER = null;
+  NEWS_OPEN = null;
+  renderTab('news');
+  // Carica subito dopo il render
+  setTimeout(() => loadNews(), 50);
+}
+
+function selectNewsTicker(ticker) {
+  NEWS_TICKER = ticker;
+  NEWS_OPEN = null;
+  loadNews();
+}
+
+async function loadNews() {
+  const el = document.getElementById('news-content');
+  if (!el) return;
+
+  if (NEWS_TAB === 'macro') {
+    el.innerHTML = buildNewsShell(null);
+    await fetchMacroNews();
+  } else {
+    el.innerHTML = buildPortfolioShell();
+    if (NEWS_TICKER) {
+      await fetchTickerNews(NEWS_TICKER);
+    } else {
+      document.getElementById('news-list').innerHTML =
+        '<div class="empty" style="padding:32px 0">Seleziona un titolo per vedere le news</div>';
+    }
+  }
+}
+
+function buildNewsShell(ticker) {
+  return `<div id="news-list"><div class="loading" style="height:30vh"><div class="spinner"></div><span>Caricamento...</span></div></div>`;
+}
+
+function buildPortfolioShell() {
+  // Pills dei ticker in portafoglio
+  const pos = DATA.posizioni || [];
+  const tickers = pos.map(p => p.ticker).filter(t => NEWS_TICKERS[t]);
+
+  const pills = tickers.map(t => {
+    const info = NEWS_TICKERS[t];
+    const active = NEWS_TICKER === t;
+    return `<button onclick="selectNewsTicker('${t}')" style="
+      padding:6px 12px;border-radius:20px;border:1px solid ${active?'var(--blue)':'var(--border)'};
+      background:${active?'var(--blue-bg)':'var(--surface2)'};color:${active?'var(--blue)':'var(--text2)'};
+      font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;font-family:var(--font)
+    ">${info.label}</button>`;
+  }).join('');
+
+  return `
+  <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:10px;margin-bottom:14px;scrollbar-width:none">
+    ${pills}
+  </div>
+  <div id="news-list">
+    <div class="empty" style="padding:32px 0">Seleziona un titolo per vedere le news</div>
+  </div>`;
+}
+
+async function fetchMacroNews() {
+  const cacheKey = 'macro';
+  const el = document.getElementById('news-list');
+  if (!el) return;
+
+  try {
+    // Controlla cache (5 minuti)
+    if (NEWS_CACHE[cacheKey] && Date.now() - NEWS_CACHE[cacheKey].ts < 300000) {
+      renderNewsList(NEWS_CACHE[cacheKey].data, el);
+      return;
+    }
+
+    const from = new Date(Date.now() - 86400000 * 3).toISOString().split('T')[0];
+    const to = new Date().toISOString().split('T')[0];
+    const url = `https://finnhub.io/api/v1/news?category=general&minId=0&token=${FINNHUB_KEY}`;
+
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+
+    // Filtra per qualità: solo fonti autorevoli
+    const quality = data.filter(n =>
+      n.headline && n.headline.length > 20 &&
+      ['Reuters','Bloomberg','CNBC','Financial Times','WSJ','FT','MarketWatch','Barron\'s'].some(s =>
+        (n.source||'').toLowerCase().includes(s.toLowerCase())
+      )
+    ).slice(0, 20);
+
+    const items = quality.length > 0 ? quality : data.slice(0, 20);
+    NEWS_CACHE[cacheKey] = { data: items, ts: Date.now() };
+    renderNewsList(items, el);
+  } catch(e) {
+    el.innerHTML = `<div class="error-banner">Errore caricamento news: ${e.message}</div>`;
+  }
+}
+
+async function fetchTickerNews(ticker) {
+  const info = NEWS_TICKERS[ticker];
+  if (!info) return;
+  const el = document.getElementById('news-list');
+  if (!el) return;
+
+  el.innerHTML = '<div class="loading" style="height:20vh"><div class="spinner"></div></div>';
+
+  const cacheKey = `ticker_${ticker}`;
+  try {
+    if (NEWS_CACHE[cacheKey] && Date.now() - NEWS_CACHE[cacheKey].ts < 300000) {
+      renderNewsList(NEWS_CACHE[cacheKey].data, el);
+      return;
+    }
+
+    const from = new Date(Date.now() - 86400000 * 7).toISOString().split('T')[0];
+    const to = new Date().toISOString().split('T')[0];
+
+    let url;
+    if (info.type === 'crypto') {
+      url = `https://finnhub.io/api/v1/news?category=crypto&token=${FINNHUB_KEY}`;
+    } else {
+      url = `https://finnhub.io/api/v1/company-news?symbol=${info.sym}&from=${from}&to=${to}&token=${FINNHUB_KEY}`;
+    }
+
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const items = data.slice(0, 20);
+    NEWS_CACHE[cacheKey] = { data: items, ts: Date.now() };
+    renderNewsList(items, el);
+  } catch(e) {
+    el.innerHTML = `<div class="error-banner">Errore: ${e.message}</div>`;
+  }
+}
+
+function renderNewsList(items, el) {
+  if (!items || !items.length) {
+    el.innerHTML = '<div class="empty">Nessuna news disponibile</div>';
+    return;
+  }
+
+  const html = items.map((n, i) => {
+    const sentiment = getSentiment(n);
+    const timeAgo = getTimeAgo(n.datetime);
+    const isOpen = NEWS_OPEN === i;
+    const summary = n.summary || n.headline || '';
+    const summaryClean = summary.length > 300 ? summary.slice(0, 300) + '...' : summary;
+
+    return `<div class="news-card-app ${isOpen?'open':''}" onclick="toggleNews(${i})">
+      <div class="news-meta-row">
+        <span class="news-source-badge">${n.source || '—'}</span>
+        <span class="news-time-badge">${timeAgo}</span>
+        <div style="margin-left:auto">${buildSentimentBars(sentiment)}</div>
+      </div>
+      <div class="news-headline">${n.headline || ''}</div>
+      ${isOpen ? `<div class="news-expand-box">
+        ${summaryClean ? `<p style="font-size:12px;color:var(--text2);line-height:1.65;margin-bottom:10px">${summaryClean}</p>` : ''}
+        <a href="${n.url||'#'}" target="_blank" rel="noopener" onclick="event.stopPropagation()" style="font-size:11px;color:var(--blue);font-weight:600;text-decoration:none">Leggi articolo completo →</a>
+      </div>` : ''}
+    </div>`;
+  }).join('');
+
+  el.innerHTML = html;
+}
+
+function toggleNews(i) {
+  NEWS_OPEN = NEWS_OPEN === i ? null : i;
+  const el = document.getElementById('news-list');
+  if (!el) return;
+  // Ricarica solo la lista senza refetch
+  const cacheKey = NEWS_TAB === 'macro' ? 'macro' : `ticker_${NEWS_TICKER}`;
+  if (NEWS_CACHE[cacheKey]) {
+    renderNewsList(NEWS_CACHE[cacheKey].data, el);
+  }
+}
+
+function getSentiment(news) {
+  // Finnhub non include sempre sentiment nei company-news
+  // Usiamo il sentiment field se disponibile, altrimenti keyword-based
+  if (typeof news.sentiment === 'number') return news.sentiment;
+
+  // Keyword scoring semplice sul titolo
+  const text = (news.headline || '').toLowerCase();
+  let score = 0;
+  const pos = ['beat','surge','jump','rise','gain','growth','profit','record','strong','up','high','buy','rally'];
+  const neg = ['miss','fall','drop','decline','loss','weak','down','cut','risk','warn','crash','sell','fear'];
+  pos.forEach(w => { if (text.includes(w)) score += 0.2; });
+  neg.forEach(w => { if (text.includes(w)) score -= 0.2; });
+  return Math.max(-1, Math.min(1, score));
+}
+
+function buildSentimentBars(score) {
+  // Determina classe e colore basati sullo score
+  let cls, color, label;
+  if (score <= -0.6)      { cls='sent-vn';  color='#ff2d55'; label=''; }
+  else if (score <= -0.2) { cls='sent-neg'; color='#ff6b81'; label=''; }
+  else if (score < -0.05) { cls='sent-ln';  color='#ff9f43'; label=''; }
+  else if (score <= 0.05) { cls='sent-neu'; color='#7a9ac0'; label=''; }
+  else if (score < 0.2)   { cls='sent-lp';  color='#26de81'; label=''; }
+  else if (score < 0.6)   { cls='sent-pos'; color='#20bf6b'; label=''; }
+  else                    { cls='sent-vp';  color='#00d2a0'; label=''; }
+
+  // Quante barre illuminare
+  const lit = score <= -0.6 ? 5 : score <= -0.2 ? 3 : score < -0.05 ? 1 :
+              score <= 0.05 ? 0 : score < 0.2 ? 1 : score < 0.6 ? 3 : 5;
+
+  const bars = [4,7,10,13,16].map((h,i) => {
+    const on = (score < 0 && i < lit) ||
+               (score >= 0 && i < lit) ||
+               (score <= 0.05 && score >= -0.05);
+    const opacity = (score <= 0.05 && score >= -0.05) ? 0.3 : (on ? 1 : 0.15);
+    return `<span style="
+      display:inline-block;width:4px;height:${h}px;border-radius:1px;
+      background:${on || (score<=0.05&&score>=-0.05) ? color : '#7a9ac0'};
+      opacity:${opacity};vertical-align:bottom;margin:0 1px
+    "></span>`;
+  }).join('');
+
+  return `<div style="display:inline-flex;align-items:flex-end;height:18px">${bars}</div>`;
+}
+
+function getTimeAgo(timestamp) {
+  if (!timestamp) return '';
+  const diff = Date.now() - timestamp * 1000;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 60) return `${mins}m fa`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h fa`;
+  return `${Math.floor(hrs/24)}g fa`;
 }
