@@ -39,7 +39,7 @@ function initSwipe() {
     const dx = e.changedTouches[0].clientX - _swipeStartX;
     const dy = e.changedTouches[0].clientY - _swipeStartY;
     const dt = Date.now() - _swipeStartTime;
-    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5 && dt < 400) {
+    if (Math.abs(dx) > 100 && Math.abs(dx) > Math.abs(dy) * 2.5 && dt < 300) {
       const idx = TAB_ORDER.indexOf(CURRENT_TAB);
       if (dx < 0 && idx < TAB_ORDER.length - 1) setTab(TAB_ORDER[idx + 1]);
       if (dx > 0 && idx > 0) setTab(TAB_ORDER[idx - 1]);
