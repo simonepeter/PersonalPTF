@@ -1,5 +1,4 @@
-
-// PersonalPTF app.js v2.3
+// PersonalPTF app.js v2.4
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxp9jj8XCDsZa89h9eplXyyWndNJHgy6U3GGkVd8ThJrPiCNx6D1xV2EZn7U1XVFmirDA/exec';
 const AC_COLOR = { ETF:'#4090ff', Azioni:'#9b6dff', Crypto:'#ffb340', Cash:'#18d98b', Fondi:'#00d4ff' };
 const AC_BG    = { ETF:'#0f2450', Azioni:'#1e1040', Crypto:'#3a2000', Cash:'#063325', Fondi:'#003340' };
@@ -22,7 +21,31 @@ window.addEventListener('DOMContentLoaded', () => {
   document.getElementById('f-date').value = new Date().toISOString().split('T')[0];
   ['f-qty','f-price','f-comm'].forEach(id => document.getElementById(id).addEventListener('input', updateFormSummary));
   loadData();
+  initSwipe();
 });
+
+// ─── SWIPE NAVIGATION ────────────────────────────────────
+const TAB_ORDER = ['overview','performance','posizioni','mandate','news','transactions'];
+let _swipeStartX = 0, _swipeStartY = 0, _swipeStartTime = 0;
+
+function initSwipe() {
+  const content = document.getElementById('content');
+  content.addEventListener('touchstart', e => {
+    _swipeStartX = e.touches[0].clientX;
+    _swipeStartY = e.touches[0].clientY;
+    _swipeStartTime = Date.now();
+  }, { passive: true });
+  content.addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - _swipeStartX;
+    const dy = e.changedTouches[0].clientY - _swipeStartY;
+    const dt = Date.now() - _swipeStartTime;
+    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5 && dt < 400) {
+      const idx = TAB_ORDER.indexOf(CURRENT_TAB);
+      if (dx < 0 && idx < TAB_ORDER.length - 1) setTab(TAB_ORDER[idx + 1]);
+      if (dx > 0 && idx > 0) setTab(TAB_ORDER[idx - 1]);
+    }
+  }, { passive: true });
+}
 
 async function loadData() {
   show('loading'); hide('page-content');
@@ -650,9 +673,15 @@ function setNewsTab(tab) {
   setTimeout(() => loadNews(), 50);
 }
 
-function selectNewsTicker(ticker) {
+function selectNewsTicker(ticker, el) {
   NEWS_TICKER = ticker;
   NEWS_OPEN = null;
+  // Centra il pill cliccato nel container scrollabile
+  if (el) {
+    setTimeout(() => {
+      el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+    }, 10);
+  }
   loadNews();
 }
 
@@ -686,7 +715,7 @@ function buildPortfolioShell() {
   const pills = tickers.map(t => {
     const info = NEWS_TICKERS[t];
     const active = NEWS_TICKER === t;
-    return `<button onclick="selectNewsTicker('${t}')" style="
+    return `<button id="pill-${t}" onclick="selectNewsTicker('${t}', this)" style="
       padding:6px 12px;border-radius:20px;border:1px solid ${active?'var(--blue)':'var(--border)'};
       background:${active?'var(--blue-bg)':'var(--surface2)'};color:${active?'var(--blue)':'var(--text2)'};
       font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;font-family:var(--font)
