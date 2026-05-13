@@ -1,6 +1,6 @@
 
 // PersonalPTF app.js v2.3
-const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxTPblW_RCgHALEkuvNUW6e659vpHRIBxrDTmLekf-EC_GIBeuOlb6eIrbv925b1AonYQ/exec';
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxp9jj8XCDsZa89h9eplXyyWndNJHgy6U3GGkVd8ThJrPiCNx6D1xV2EZn7U1XVFmirDA/exec';
 const AC_COLOR = { ETF:'#4090ff', Azioni:'#9b6dff', Crypto:'#ffb340', Cash:'#18d98b', Fondi:'#00d4ff' };
 const AC_BG    = { ETF:'#0f2450', Azioni:'#1e1040', Crypto:'#3a2000', Cash:'#063325', Fondi:'#003340' };
 
