@@ -111,7 +111,7 @@ function setTab(tab) {
 
 function renderTab(tab) {
   const el = document.getElementById('page-content');
-  const map = { overview, performance, posizioni, mandate, transactions, simulatore, news };
+  const map = { overview, performance, posizioni, mandate, transactions, simulatore, news, ai };
   el.innerHTML = (map[tab] || (() => '<div class="empty">In costruzione</div>'))();
   if (tab === 'simulatore') updateSim();
   if (tab === 'news') setTimeout(() => loadNews(), 50);
@@ -1013,4 +1013,97 @@ function getTimeAgo(timestamp) {
   const hrs = Math.floor(mins / 60);
   if (hrs < 24) return `${hrs}h fa`;
   return `${Math.floor(hrs/24)}g fa`;
+}
+
+// ═══════════════════════════════════════════════════════════
+// TAB AI — Analisi portafoglio con Claude via Vercel proxy
+// ═══════════════════════════════════════════════════════════
+
+let AI_LOADING = false;
+let AI_RESULT = null;
+
+function ai() {
+  return `
+  <div class="section-title">🤖 Analisi AI Portafoglio</div>
+  <div class="card" style="margin-bottom:12px">
+    <div style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:14px">Claude analizza posizioni, performance, mandate drift e news — e produce suggerimenti concreti basati sui tuoi dati reali.</div>
+    <button onclick="runAIAnalysis()" id="ai-analyze-btn" style="width:100%;background:linear-gradient(135deg,var(--blue),var(--violet));color:white;border:none;border-radius:var(--radius-sm);font-family:var(--font);font-size:14px;font-weight:700;padding:14px;cursor:pointer">✨ Analizza portafoglio</button>
+  </div>
+  <div class="card" style="margin-bottom:12px">
+    <div style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px">Fai una domanda</div>
+    <div style="display:flex;gap:8px">
+      <input type="text" id="ai-question" placeholder="es. Cosa faccio con GRAB? Vale la pena aumentare l'oro?" style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius-xs);color:var(--text);font-family:var(--font);font-size:13px;padding:10px 12px;outline:none">
+      <button onclick="runAIQuestion()" style="background:var(--blue-bg);color:var(--blue);border:1px solid rgba(64,144,255,0.3);border-radius:var(--radius-xs);padding:10px 16px;cursor:pointer;font-size:16px;font-weight:700;font-family:var(--font)">→</button>
+    </div>
+  </div>
+  <div id="ai-result-area"><div class="empty" style="padding:40px 0">Premi "Analizza portafoglio" per iniziare</div></div>`;
+}
+
+function _buildPortfolioContext() {
+  const o = DATA.overview || {};
+  const pos = DATA.posizioni || [];
+  const perf = DATA.performance || [];
+  const mandate = DATA.mandate || [];
+  const last = perf.length ? perf[perf.length-1] : null;
+  const posList = pos.map(p=>`- ${p.ticker} (${p.ac}): MV €${(p.mv||0).toFixed(0)}, P&L ${rawPct(p.pnlPct).toFixed(2)}%`).join('\n');
+  const twrLine = last ? `TWR: ${(last.twr*100).toFixed(2)}% | MSCI: ${last.msci!==null?(last.msci*100).toFixed(2)+'%':'N/D'} | S&P: ${last.sp!==null?(last.sp*100).toFixed(2)+'%':'N/D'}` : 'N/D';
+  const mandateList = mandate.filter(m=>Math.abs(m.drift||0)>0.01).map(m=>`- ${m.label}: ${((m.current||0)*100).toFixed(1)}% vs target ${((m.target||0)*100).toFixed(0)}% (drift ${((m.drift||0)*100).toFixed(1)}%) — ${m.status}`).join('\n');
+  return `PORTAFOGLIO — ${new Date().toLocaleDateString('it-IT')}\n\nPATRIMONIO:\n- Totale: €${(o.navTotale||0).toFixed(0)}\n- Gestito: €${(o.navGestito||0).toFixed(0)} (P&L ${((o.pnlPct||0)*100).toFixed(2)}% = €${(o.pnlEur||0).toFixed(0)})\n- Stabile: €${(o.navStabile||0).toFixed(0)}\n- Cash: €${(o.cashFineco||0).toFixed(0)}\n\nPERFORMANCE (${perf.length} giorni):\n${twrLine}\n\nPOSIZIONI:\n${posList}\n\nMANDATE DRIFT:\n${mandateList||'Nessun drift significativo'}`;
+}
+
+async function _callClaudeProxy(prompt) {
+  const res = await fetch('/api/claude', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt, max_tokens: 1000 })
+  });
+  if (!res.ok) { const e = await res.json(); throw new Error(e.error || `HTTP ${res.status}`); }
+  const data = await res.json();
+  return data.text || '';
+}
+
+async function runAIAnalysis() {
+  if (AI_LOADING) return;
+  AI_LOADING = true;
+  const btn = document.getElementById('ai-analyze-btn');
+  if (btn) { btn.textContent = '⏳ Analisi in corso...'; btn.style.opacity='0.7'; btn.disabled=true; }
+  document.getElementById('ai-result-area').innerHTML = '<div class="loading" style="height:30vh"><div class="spinner"></div><span style="margin-top:8px;color:var(--text3)">Claude sta analizzando...</span></div>';
+  const prompt = `Sei un advisor finanziario esperto. Analizza questo portafoglio e rispondi SOLO con JSON valido, nessun testo fuori.\n\n${_buildPortfolioContext()}\n\nFormato (JSON puro):\n{"situazione":"2-3 frasi con numeri specifici","attenzione":["punto 1 con numeri","punto 2","punto 3"],"azioni":["azione 1 con €","azione 2 con €","azione 3"]}`;
+  try {
+    const text = await _callClaudeProxy(prompt);
+    try { AI_RESULT = { type:'analysis', data: JSON.parse(text.replace(/```json|```/g,'').trim()) }; }
+    catch(e) { AI_RESULT = { type:'raw', text }; }
+  } catch(e) { AI_RESULT = { type:'error', message: e.message }; }
+  AI_LOADING = false;
+  if (btn) { btn.textContent='✨ Analizza portafoglio'; btn.style.opacity='1'; btn.disabled=false; }
+  document.getElementById('ai-result-area').innerHTML = _renderAIResult(AI_RESULT);
+}
+
+async function runAIQuestion() {
+  const input = document.getElementById('ai-question');
+  const question = (input?input.value:'').trim();
+  if (!question || AI_LOADING) return;
+  AI_LOADING = true;
+  document.getElementById('ai-result-area').innerHTML = '<div class="loading" style="height:20vh"><div class="spinner"></div></div>';
+  const prompt = `Sei un advisor finanziario. Portafoglio:\n\n${_buildPortfolioContext()}\n\nDomanda: "${question}"\n\nRispondi diretto, con numeri reali, max 5 frasi.`;
+  try {
+    const text = await _callClaudeProxy(prompt);
+    AI_RESULT = { type:'answer', question, text };
+  } catch(e) { AI_RESULT = { type:'error', message: e.message }; }
+  AI_LOADING = false;
+  document.getElementById('ai-result-area').innerHTML = _renderAIResult(AI_RESULT);
+}
+
+function _renderAIResult(result) {
+  if (!result) return '<div class="empty">Nessun risultato</div>';
+  if (result.type==='error') return `<div class="error-banner">Errore: ${result.message}</div>`;
+  if (result.type==='answer') return `<div class="card" style="border-color:rgba(139,92,246,0.3)"><div style="font-size:10px;color:var(--violet);font-weight:700;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:10px">💬 ${result.question}</div><div style="font-size:13px;color:var(--text2);line-height:1.75">${(result.text||'').replace(/\n/g,'<br>')}</div><div style="font-size:10px;color:var(--text4);margin-top:12px">Claude Haiku · ${new Date().toLocaleTimeString('it-IT')}</div></div>`;
+  if (result.type==='raw') return `<div class="card"><div style="font-size:13px;color:var(--text2);line-height:1.7">${(result.text||'').replace(/\n/g,'<br>')}</div></div>`;
+  if (result.type==='analysis') {
+    const d = result.data;
+    const att = (d.attenzione||[]).map(a=>`<div style="display:flex;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)"><span style="color:var(--amber);font-size:15px;flex-shrink:0">⚠</span><span style="font-size:13px;color:var(--text2);line-height:1.55">${a}</span></div>`).join('');
+    const az = (d.azioni||[]).map((a,i)=>{const c=['var(--blue)','var(--green)','var(--violet)'][i%3];return `<div style="display:flex;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)"><span style="color:${c};font-size:14px;font-weight:700;flex-shrink:0">${i+1}.</span><span style="font-size:13px;color:var(--text2);line-height:1.55">${a}</span></div>`;}).join('');
+    return `<div class="card" style="border-color:rgba(64,144,255,0.2);margin-bottom:10px"><div style="font-size:10px;color:var(--blue);font-weight:700;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:10px">📊 Situazione attuale</div><div style="font-size:13px;color:var(--text2);line-height:1.75">${d.situazione||''}</div></div><div class="card" style="border-color:rgba(255,179,64,0.2);margin-bottom:10px"><div style="font-size:10px;color:var(--amber);font-weight:700;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px">⚠️ Punti di attenzione</div>${att}</div><div class="card" style="border-color:rgba(24,217,139,0.2)"><div style="font-size:10px;color:var(--green);font-weight:700;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px">🎯 Azioni suggerite</div>${az}<div style="font-size:10px;color:var(--text4);margin-top:12px">Claude Haiku · ${new Date().toLocaleTimeString('it-IT')} · Solo indicativo</div></div>`;
+  }
+  return '<div class="empty">Formato non riconosciuto</div>';
 }
