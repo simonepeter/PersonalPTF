@@ -1,4 +1,4 @@
-// PersonalPTF app.js v2.4
+// PersonalPTF app.js v2.6
 const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbxp9jj8XCDsZa89h9eplXyyWndNJHgy6U3GGkVd8ThJrPiCNx6D1xV2EZn7U1XVFmirDA/exec';
 const AC_COLOR = { ETF:'#4090ff', Azioni:'#9b6dff', Crypto:'#ffb340', Cash:'#18d98b', Fondi:'#00d4ff' };
 const AC_BG    = { ETF:'#0f2450', Azioni:'#1e1040', Crypto:'#3a2000', Cash:'#063325', Fondi:'#003340' };
@@ -30,21 +30,56 @@ let _swipeStartX = 0, _swipeStartY = 0, _swipeStartTime = 0;
 
 function initSwipe() {
   const content = document.getElementById('content');
+  let _swipeTarget = null;
+
   content.addEventListener('touchstart', e => {
     _swipeStartX = e.touches[0].clientX;
     _swipeStartY = e.touches[0].clientY;
     _swipeStartTime = Date.now();
+    _swipeTarget = e.target;
   }, { passive: true });
+
   content.addEventListener('touchend', e => {
     const dx = e.changedTouches[0].clientX - _swipeStartX;
     const dy = e.changedTouches[0].clientY - _swipeStartY;
     const dt = Date.now() - _swipeStartTime;
-    if (Math.abs(dx) > 100 && Math.abs(dx) > Math.abs(dy) * 2.5 && dt < 300) {
+
+    // Ignora swipe se touch partito dentro un elemento scrollabile orizzontalmente
+    if (_swipeTarget) {
+      let el = _swipeTarget;
+      while (el && el !== content) {
+        const ow = window.getComputedStyle(el).overflowX;
+        if ((ow === 'auto' || ow === 'scroll') && el.scrollWidth > el.clientWidth) return;
+        el = el.parentElement;
+      }
+    }
+
+    // Soglia alta per evitare false attivazioni
+    if (Math.abs(dx) > 110 && Math.abs(dx) > Math.abs(dy) * 2.5 && dt < 350) {
       const idx = TAB_ORDER.indexOf(CURRENT_TAB);
-      if (dx < 0 && idx < TAB_ORDER.length - 1) setTab(TAB_ORDER[idx + 1]);
-      if (dx > 0 && idx > 0) setTab(TAB_ORDER[idx - 1]);
+      if (dx < 0 && idx < TAB_ORDER.length - 1) setTabAnimated(TAB_ORDER[idx + 1], 'left');
+      if (dx > 0 && idx > 0) setTabAnimated(TAB_ORDER[idx - 1], 'right');
     }
   }, { passive: true });
+}
+
+function setTabAnimated(tab, dir) {
+  const el = document.getElementById('page-content');
+  if (!el) { setTab(tab); return; }
+  el.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
+  el.style.transform = dir === 'left' ? 'translateX(-28px)' : 'translateX(28px)';
+  el.style.opacity = '0';
+  setTimeout(() => {
+    setTab(tab);
+    el.style.transition = 'none';
+    el.style.transform = dir === 'left' ? 'translateX(28px)' : 'translateX(-28px)';
+    el.style.opacity = '0';
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      el.style.transition = 'transform 0.2s ease, opacity 0.2s ease';
+      el.style.transform = 'translateX(0)';
+      el.style.opacity = '1';
+    }));
+  }, 170);
 }
 
 async function loadData() {
@@ -128,7 +163,45 @@ function overview() {
       </div>
     </div>
     <div class="donut-detail" id="donut-detail" style="display:none"></div>
-  </div>`;
+  </div>
+  ${_rebalanceCard()}`;
+}
+
+
+function _rebalanceCard() {
+  const m = DATA.mandate || [];
+  const o = DATA.overview || {};
+  const nav = o.navGestito || 0;
+  if (!nav || !m.length) return '';
+  const l1 = ['ETF','Azioni','Cash','Crypto','Fondi','Oro'];
+  const actions = m
+    .filter(row => l1.includes(row.label))
+    .map(row => {
+      const cur = typeof row.current === 'number' ? row.current : 0;
+      const tgt = typeof row.target === 'number' ? row.target : 0;
+      const drift = cur - tgt;
+      return { label: row.label, drift, euroAmount: Math.abs(drift) * nav };
+    })
+    .filter(a => Math.abs(a.drift) > 0.03)
+    .sort((a,b) => Math.abs(b.drift) - Math.abs(a.drift));
+
+  if (!actions.length) {
+    return `<div class="card" style="border-color:rgba(24,217,139,0.2)"><div style="display:flex;align-items:center;gap:10px"><span style="font-size:20px">✅</span><div><div style="font-size:13px;font-weight:700;color:var(--green)">Portafoglio in equilibrio</div><div style="font-size:11px;color:var(--text3)">Nessun rebalancing necessario</div></div></div></div>`;
+  }
+
+  const rows = actions.slice(0,4).map(a => {
+    const isSotto = a.drift < 0;
+    const color = isSotto ? 'var(--blue)' : 'var(--amber)';
+    return `<div style="display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--border)">
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="font-size:16px;color:${color};font-weight:700">${isSotto?'↑':'↓'}</span>
+        <div><span style="font-size:13px;font-weight:600;color:var(--text)">${isSotto?'Compra':'Riduci'} ${a.label}</span><div style="font-size:10px;color:var(--text3)">Drift ${a.drift>=0?'+':''}${(a.drift*100).toFixed(1)}%</div></div>
+      </div>
+      <span style="font-size:14px;font-weight:700;font-family:var(--mono);color:${color}">~${eur(a.euroAmount,0)}</span>
+    </div>`;
+  }).join('');
+
+  return `<div class="card"><div class="section-title">⚖️ Azioni suggerite</div>${rows}<div style="font-size:10px;color:var(--text4);margin-top:8px">Basato sui drift mandate L1 · Solo indicativo</div></div>`;
 }
 
 function buildDonut(byAC, total, gestito) {
@@ -631,19 +704,33 @@ async function submitForm(){
 const FINNHUB_KEY = 'd81okapr01qrojfci26gd81okapr01qrojfci270';
 
 // Mapping ticker portafoglio → simbolo Finnhub
-const NEWS_TICKERS = {
-  'AMZN':    { sym: 'AMZN',  label: 'Amazon',   type: 'stock' },
-  'SPOT':    { sym: 'SPOT',  label: 'Spotify',  type: 'stock' },
-  'FISV':    { sym: 'FISV',  label: 'Fiserv',   type: 'stock' },
-  'GRAB':    { sym: 'GRAB',  label: 'Grab',     type: 'stock' },
-  'BABA':    { sym: 'BABA',  label: 'Alibaba',  type: 'stock' },
-  'SWDA.MI': { sym: 'IWDA',  label: 'MSCI World', type: 'etf' },
-  'AEME.PA': { sym: 'EEM',   label: 'Emerging', type: 'etf' },
-  'SGLD.MI': { sym: 'GLD',   label: 'Gold ETC', type: 'etf' },
-  'VDIV':    { sym: 'VDIV',  label: 'Dividendi EU', type: 'etf' },
-  'LGCW':    { sym: 'PHO',   label: 'Water ETF', type: 'etf' },
-  'XRP':     { sym: 'BINANCE:XRPUSDT', label: 'XRP', type: 'crypto' },
+const TICKER_MAP = {
+  'SWDA.MI': { sym: 'IWDA', label: 'MSCI World', type: 'etf' },
+  'AEME.PA': { sym: 'EEM',  label: 'Emerging',   type: 'etf' },
+  'SGLD.MI': { sym: 'GLD',  label: 'Gold ETC',   type: 'etf' },
+  'SGLD':    { sym: 'GLD',  label: 'Gold ETC',   type: 'etf' },
+  'LGCW':    { sym: 'PHO',  label: 'Water ETF',  type: 'etf' },
+  'IGLN':    { sym: 'GLD',  label: 'Gold',       type: 'etf' },
+  'VDIV':    { sym: 'VDIV', label: 'Div EU',     type: 'etf' },
+  'XEON':    { sym: 'XEON', label: 'Cash XEON',  type: 'etf' },
+  'XRP':     { sym: 'XRP',  label: 'XRP',        type: 'crypto' },
 };
+function getNewsTickers() {
+  if (!DATA) return {};
+  const result = {};
+  (DATA.posizioni || []).forEach(p => {
+    const t = p.ticker;
+    if (TICKER_MAP[t]) {
+      result[t] = TICKER_MAP[t];
+    } else {
+      const sym = t.split('.')[0];
+      const type = p.ac === 'Crypto' ? 'crypto' : p.ac === 'ETF' ? 'etf' : 'stock';
+      const label = (p.nome || sym).slice(0, 12);
+      result[t] = { sym, label, type };
+    }
+  });
+  return result;
+}
 
 // Macro categories
 const MACRO_CATEGORIES = ['general','forex','merger'];
@@ -676,11 +763,12 @@ function setNewsTab(tab) {
 function selectNewsTicker(ticker, el) {
   NEWS_TICKER = ticker;
   NEWS_OPEN = null;
-  // Centra il pill cliccato nel container scrollabile
   if (el) {
-    setTimeout(() => {
-      el.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
-    }, 10);
+    const container = el.parentElement;
+    if (container) {
+      const target = el.offsetLeft - (container.offsetWidth / 2) + (el.offsetWidth / 2);
+      container.scrollTo({ left: target, behavior: 'smooth' });
+    }
   }
   loadNews();
 }
@@ -694,11 +782,12 @@ async function loadNews() {
     await fetchMacroNews();
   } else {
     el.innerHTML = buildPortfolioShell();
+    fetchEarnings();
     if (NEWS_TICKER) {
       await fetchTickerNews(NEWS_TICKER);
     } else {
       document.getElementById('news-list').innerHTML =
-        '<div class="empty" style="padding:32px 0">Seleziona un titolo per vedere le news</div>';
+        '<div class="empty" style="padding:32px 0">Seleziona un titolo</div>';
     }
   }
 }
@@ -708,27 +797,14 @@ function buildNewsShell(ticker) {
 }
 
 function buildPortfolioShell() {
-  // Pills dei ticker in portafoglio
-  const pos = DATA.posizioni || [];
-  const tickers = pos.map(p => p.ticker).filter(t => NEWS_TICKERS[t]);
-
+  const NT = getNewsTickers();
+  const tickers = Object.keys(NT);
   const pills = tickers.map(t => {
-    const info = NEWS_TICKERS[t];
-    const active = NEWS_TICKER === t;
-    return `<button id="pill-${t}" onclick="selectNewsTicker('${t}', this)" style="
-      padding:6px 12px;border-radius:20px;border:1px solid ${active?'var(--blue)':'var(--border)'};
-      background:${active?'var(--blue-bg)':'var(--surface2)'};color:${active?'var(--blue)':'var(--text2)'};
-      font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;font-family:var(--font)
-    ">${info.label}</button>`;
+    const info = NT[t], active = NEWS_TICKER === t;
+    return `<button id="pill-${t}" onclick="selectNewsTicker('${t}', this)" style="padding:6px 12px;border-radius:20px;border:1px solid ${active?'var(--blue)':'var(--border)'};background:${active?'var(--blue-bg)':'var(--surface2)'};color:${active?'var(--blue)':'var(--text2)'};font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;font-family:var(--font)">${info.label}</button>`;
   }).join('');
-
-  return `
-  <div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:10px;margin-bottom:14px;scrollbar-width:none">
-    ${pills}
-  </div>
-  <div id="news-list">
-    <div class="empty" style="padding:32px 0">Seleziona un titolo per vedere le news</div>
-  </div>`;
+  const earningsCard = `<div id="earnings-card" style="margin-bottom:12px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-sm);padding:13px 14px"><div style="font-size:10px;color:var(--text3);font-weight:600;letter-spacing:0.6px;text-transform:uppercase;margin-bottom:8px">📅 Prossimi Earnings</div><div id="earnings-list" style="font-size:12px;color:var(--text3)">Caricamento...</div></div>`;
+  return earningsCard + `<div style="display:flex;gap:8px;overflow-x:auto;padding-bottom:10px;margin-bottom:14px;scrollbar-width:none">${pills}</div><div id="news-list"><div class="empty" style="padding:32px 0">Seleziona un titolo</div></div>`;
 }
 
 async function fetchMacroNews() {
@@ -768,8 +844,11 @@ async function fetchMacroNews() {
 }
 
 async function fetchTickerNews(ticker) {
-  const info = NEWS_TICKERS[ticker];
+  const NT = getNewsTickers();
+  const info = NT[ticker];
   if (!info) return;
+  // Carica sentiment aggregato in background
+  fetchSentimentCard(ticker, info.sym);
   const el = document.getElementById('news-list');
   if (!el) return;
 
@@ -808,8 +887,10 @@ function renderNewsList(items, el) {
     el.innerHTML = '<div class="empty">Nessuna news disponibile</div>';
     return;
   }
-
-  const html = items.map((n, i) => {
+  const sentCard = (NEWS_TAB === 'portfolio' && NEWS_TICKER)
+    ? `<div id="sentiment-card" style="display:none;background:var(--surface2);border:1px solid var(--border);border-radius:var(--radius-sm);padding:12px 14px;margin-bottom:12px"></div>`
+    : '';
+  const html = sentCard + items.map((n, i) => {
     const sentiment = getSentiment(n);
     const timeAgo = getTimeAgo(n.datetime);
     const isOpen = NEWS_OPEN === i;
@@ -842,6 +923,41 @@ function toggleNews(i) {
   if (NEWS_CACHE[cacheKey]) {
     renderNewsList(NEWS_CACHE[cacheKey].data, el);
   }
+}
+
+
+async function fetchEarnings() {
+  const el = document.getElementById('earnings-list');
+  if (!el) return;
+  try {
+    const from = new Date().toISOString().split('T')[0];
+    const to = new Date(Date.now() + 86400000*30).toISOString().split('T')[0];
+    const NT = getNewsTickers();
+    const syms = Object.values(NT).filter(v=>v.type==='stock').map(v=>v.sym);
+    if (!syms.length) { el.innerHTML='<span style="color:var(--text4)">Nessun titolo stock in portafoglio</span>'; return; }
+    const res = await fetch(`https://finnhub.io/api/v1/calendar/earnings?from=${from}&to=${to}&token=${FINNHUB_KEY}`);
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const events = (data.earningsCalendar||[]).filter(e=>syms.includes(e.symbol)).slice(0,5);
+    if (!events.length) { el.innerHTML='<span style="color:var(--text4)">Nessun earnings nei prossimi 30 giorni</span>'; return; }
+    el.innerHTML = events.map(e=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--border)"><div><span style="font-size:13px;font-weight:700;color:var(--text)">${e.symbol}</span>${e.epsEstimate?`<span style="font-size:10px;color:var(--text3);margin-left:8px">EPS est. ${e.epsEstimate}</span>`:''}</div><span style="font-size:11px;font-family:var(--mono);color:var(--amber)">${e.date}</span></div>`).join('');
+  } catch(err) { const el2=document.getElementById('earnings-list'); if(el2) el2.innerHTML='<span style="color:var(--text4)">—</span>'; }
+}
+
+async function fetchSentimentCard(ticker, sym) {
+  try {
+    const res = await fetch(`https://finnhub.io/api/v1/news-sentiment?symbol=${sym}&token=${FINNHUB_KEY}`);
+    if (!res.ok) return;
+    const d = await res.json();
+    const el = document.getElementById('sentiment-card');
+    if (!el || !d || !d.sentiment) return;
+    const bull = d.sentiment.bullishPercent || 0;
+    const bear = d.sentiment.bearishPercent || 0;
+    const score = (bull - bear) / 100;
+    const buzz = d.buzz && d.buzz.weeklyAverage ? d.buzz.weeklyAverage : null;
+    el.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px"><span style="font-size:11px;font-weight:700;color:var(--text2)">Sentiment 7 giorni</span><div style="display:flex;align-items:center;gap:8px">${buildSentimentBars(score)}<span style="font-size:11px;font-family:var(--mono);color:var(--text3)">${score>=0?'+':''}${(score*100).toFixed(0)}%</span></div></div>${buzz?`<div style="font-size:10px;color:var(--text3)">Buzz: <b style="color:var(--text2)">${buzz.toFixed(0)}</b> articoli/sett · Bullish ${bull.toFixed(0)}% · Bearish ${bear.toFixed(0)}%</div>`:''}`;
+    el.style.display = 'block';
+  } catch(e) {}
 }
 
 function getSentiment(news) {
