@@ -1227,8 +1227,7 @@ function _renderAIResult(result) {
     return `<div class="card" style="border-color:${color}33">
       <div style="font-size:10px;color:${color};font-weight:700;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px">${icon} ${name}</div>
       <div style="font-size:11px;color:var(--text3);font-style:italic;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--border)">"${result.question}"</div>
-      <div style="font-size:13px;color:var(--text2);line-height:1.75">${(result.text||'').replace(/
-/g,'<br>')}</div>
+      <div style="font-size:13px;color:var(--text2);line-height:1.75">${(result.text||'').split('\n').join('<br>')}</div>
       <div style="font-size:10px;color:var(--text4);margin-top:12px">Claude Haiku · ${new Date().toLocaleTimeString('it-IT')}</div>
     </div>`;
   }
@@ -1236,8 +1235,7 @@ function _renderAIResult(result) {
   if (result.type === 'raw') {
     return `<div class="card" style="border-color:${color}33">
       <div style="font-size:10px;color:${color};font-weight:700;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:10px">${icon} ${name}</div>
-      <div style="font-size:13px;color:var(--text2);line-height:1.7">${(result.text||'').replace(/
-/g,'<br>')}</div>
+      <div style="font-size:13px;color:var(--text2);line-height:1.7">${(result.text||'').split('\n').join('<br>')}</div>
     </div>`;
   }
 
