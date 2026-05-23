@@ -1019,24 +1019,304 @@ function getTimeAgo(timestamp) {
 // TAB AI — Analisi portafoglio con Claude via Vercel proxy
 // ═══════════════════════════════════════════════════════════
 
+// AI variables moved below
+// ═══ STRATEGIA CONDIVISA AGENTI ═══
+const INVESTMENT_STRATEGY = `STRATEGIA SC ASSET MANAGEMENT - VALUE INVESTING LUNGO PERIODO
+
+FILOSOFIA: Prezzo non e' uguale a Valore. Volatilita' = opportunita'. Pazienza = vantaggio.
+MAI vendere per paura. MAI cambiare tesi per il prezzo. PAC non si ferma mai.
+
+CORE (MAI VENDERE - SWDA/AEME/IUIT/BOTZ):
+- SWDA.MI 35% PAC - MSCI World base globale
+- AEME.PA 20% PAC - Emerging Markets
+- IUIT/QDVE 25% PAC - Tech USA puro + semiconductors inclusi
+- BOTZ UCITS 20% PAC - Robotica fisica globale + Giappone
+
+SATELLITE TEMATICO: LGCW acqua (hold lungo)
+SATELLITE STOCK: FISV categoria A target +100%, SPOT categoria B target +50%, GRAB categoria B target +60%, AMZN/BABA in valutazione
+SATELLITE CRYPTO: XRP max 5-10% gestito
+
+CASH: min 10%, target 15-20%, max 35%. Strumento preferito: XEON.
+FREE RIDE: al +100% su Categoria A, recupera capitale originale investito, resto gira senza rischio.
+
+REGOLE NON NEGOZIABILI:
+1. MAI vendere Core
+2. PAC minimo 400 euro/mese sempre
+3. Cash minimo 10% sempre
+4. Ogni stock ha tesi scritta
+5. Tesi cambia solo su fondamentali mai su prezzo
+6. GRAB max 5% del gestito
+7. BABA: unica eccezione, uscire se scenario geopolitico Cina peggiora materialmente`;
+
+let AI_AGENT = 'pm'; // 'analyst' | 'pm' | 'risk'
 let AI_LOADING = false;
 let AI_RESULT = null;
 
 function ai() {
+  const agents = [
+    { id:'analyst', icon:'🔍', label:'Market Analyst', desc:'Analisi del momento di mercato e contesto macro' },
+    { id:'pm',      icon:'📊', label:'Portfolio Manager', desc:'Piano operativo mensile e distribuzione PAC' },
+    { id:'risk',    icon:'⚠️', label:'Risk Manager', desc:'Rischi reali del portafoglio e mitigazioni' },
+  ];
+  const tabs = agents.map(a => `
+    <button onclick="setAIAgent('${a.id}')" style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:10px 6px;border:1px solid ${AI_AGENT===a.id?'rgba(64,144,255,0.4)':'var(--border)'};background:${AI_AGENT===a.id?'var(--blue-bg)':'var(--surface2)'};border-radius:var(--radius-xs);cursor:pointer;transition:all 0.2s">
+      <span style="font-size:18px">${a.icon}</span>
+      <span style="font-size:10px;font-weight:700;color:${AI_AGENT===a.id?'var(--blue)':'var(--text3)'};text-align:center;line-height:1.3">${a.label}</span>
+    </button>`).join('');
+
+  const curAgent = agents.find(a => a.id === AI_AGENT);
+  const placeholders = {
+    analyst: 'es. È un buon momento per aumentare AEME? Come vedi il mercato?',
+    pm: 'es. Ho 800 euro questo mese, cosa compro? Come distribuisco il PAC?',
+    risk: 'es. Quali sono i miei rischi principali? Sono troppo esposto su GRAB?',
+  };
+
   return `
-  <div class="section-title">🤖 Analisi AI Portafoglio</div>
+  <div style="display:flex;gap:8px;margin-bottom:14px">${tabs}</div>
   <div class="card" style="margin-bottom:12px">
-    <div style="font-size:12px;color:var(--text2);line-height:1.6;margin-bottom:14px">Claude analizza posizioni, performance, mandate drift e news — e produce suggerimenti concreti basati sui tuoi dati reali.</div>
-    <button onclick="runAIAnalysis()" id="ai-analyze-btn" style="width:100%;background:linear-gradient(135deg,var(--blue),var(--violet));color:white;border:none;border-radius:var(--radius-sm);font-family:var(--font);font-size:14px;font-weight:700;padding:14px;cursor:pointer">✨ Analizza portafoglio</button>
-  </div>
-  <div class="card" style="margin-bottom:12px">
-    <div style="font-size:11px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px">Fai una domanda</div>
+    <div style="font-size:11px;color:var(--text3);margin-bottom:10px">${curAgent.icon} <b style="color:var(--text2)">${curAgent.label}</b> — ${curAgent.desc}</div>
+    <button onclick="runAgentAnalysis()" id="ai-analyze-btn" style="width:100%;background:linear-gradient(135deg,var(--blue),var(--violet));color:white;border:none;border-radius:var(--radius-sm);font-family:var(--font);font-size:14px;font-weight:700;padding:13px;cursor:pointer;margin-bottom:10px">
+      ${curAgent.icon} Analisi completa
+    </button>
     <div style="display:flex;gap:8px">
-      <input type="text" id="ai-question" placeholder="es. Cosa faccio con GRAB? Vale la pena aumentare l'oro?" style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius-xs);color:var(--text);font-family:var(--font);font-size:13px;padding:10px 12px;outline:none">
-      <button onclick="runAIQuestion()" style="background:var(--blue-bg);color:var(--blue);border:1px solid rgba(64,144,255,0.3);border-radius:var(--radius-xs);padding:10px 16px;cursor:pointer;font-size:16px;font-weight:700;font-family:var(--font)">→</button>
+      <input type="text" id="ai-question" placeholder="${placeholders[AI_AGENT]}" style="flex:1;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius-xs);color:var(--text);font-family:var(--font);font-size:13px;padding:10px 12px;outline:none">
+      <button onclick="runAgentQuestion()" style="background:var(--blue-bg);color:var(--blue);border:1px solid rgba(64,144,255,0.3);border-radius:var(--radius-xs);padding:10px 16px;cursor:pointer;font-size:16px;font-weight:700;font-family:var(--font)">→</button>
     </div>
   </div>
-  <div id="ai-result-area"><div class="empty" style="padding:40px 0">Premi "Analizza portafoglio" per iniziare</div></div>`;
+  <div id="ai-result-area">
+    ${AI_RESULT ? _renderAIResult(AI_RESULT) : '<div class="empty" style="padding:40px 0">Seleziona un agente e premi "Analisi completa"</div>'}
+  </div>`;
+}
+
+function setAIAgent(agent) {
+  AI_AGENT = agent;
+  AI_RESULT = null;
+  renderTab('ai');
+}
+
+function _getSystemPrompt(agent) {
+  const base = `Sei un advisor finanziario esperto che lavora per SC Asset Management.
+Conosci perfettamente questa strategia di investimento:
+
+${INVESTMENT_STRATEGY}
+
+Dati portafoglio aggiornati:
+${_buildPortfolioContext()}
+
+REGOLE DI RISPOSTA:
+- Usa sempre numeri specifici dal portafoglio reale
+- Distingui sempre volatilita' normale da rischio reale
+- Non suggerire MAI di vendere il Core (SWDA, AEME, IUIT, BOTZ)
+- Ragiona sempre in ottica 10-20 anni
+- Sii diretto e concreto, no frasi generiche`;
+
+  const specific = {
+    analyst: `
+
+SEI IL MARKET ANALYST. Il tuo ruolo e' analizzare il contesto di mercato attuale.
+Valuta: valutazioni indici vs storia, sentiment macro, tassi/inflazione, RSI, geopolitica.
+Output: valutazione chiara del momento con raccomandazione su sizing PAC e livello cash.
+Ricorda: mercato caro non significa smettere di investire, significa essere piu' selettivi.
+Un mercato in calo e' spesso la migliore notizia per chi ha orizzonte lungo.`,
+
+    pm: `
+
+SEI IL PORTFOLIO MANAGER. Il tuo ruolo e' proporre il piano operativo concreto.
+Valuta: cash disponibile, allocazione attuale vs target, commissioni (evita ordini piccoli), stato tesi stock.
+Output: piano mensile con importi specifici per ogni strumento e motivazione precisa.
+Il PAC non si ferma mai. Preferisci meno ordini piu' grandi per ridurre commissioni.
+MAI suggerire di vendere il Core per nessun motivo.`,
+
+    risk: `
+
+SEI IL RISK MANAGER. Il tuo ruolo e' identificare i rischi reali del portafoglio.
+Analizza: concentrazione geo/settore/valuta, correlazioni, rischio perdita permanente, liquidita', tail risk.
+Output: mappa rischi ordinata per severita' (ALTO/MEDIO/BASSO) con azioni concrete.
+FONDAMENTALE: distingui sempre volatilita' normale (accettata, da sfruttare) da
+rischio perdita permanente di capitale (da evitare). Sono cose completamente diverse.`,
+  };
+
+  return base + (specific[agent] || '');
+}
+
+function _buildPromptForAgent(agent, question) {
+  const systemPrompt = _getSystemPrompt(agent);
+  if (question) {
+    return systemPrompt + `
+
+Domanda specifica: "${question}"
+
+Rispondi in modo diretto con numeri reali. Max 5-6 frasi concrete.`;
+  }
+  const fullAnalysis = {
+    analyst: `
+
+Fai un'analisi completa del momento di mercato attuale in relazione a questo portafoglio.
+Rispondi SOLO con questo JSON valido:
+{"titolo":"frase che riassume il momento","valutazione":"2-3 frasi sul contesto di mercato con numeri","raccomandazione_pac":"cosa fare con il PAC questo mese","raccomandazione_cash":"livello cash consigliato e perche'","segnali":["segnale positivo 1","segnale negativo 1","elemento neutro da monitorare"]}`,
+
+    pm: `
+
+Proponi il piano operativo per questo mese.
+Rispondi SOLO con questo JSON valido:
+{"titolo":"piano mese corrente","sintesi":"1-2 frasi sul piano","azioni":[{"strumento":"ticker","azione":"compra/mantieni/riduci","importo":"importo in euro o percentuale","motivazione":"perche' questa decisione"}],"note":"considerazioni aggiuntive su commissioni o timing"}`,
+
+    risk: `
+
+Fai un'analisi completa dei rischi reali del portafoglio.
+Rispondi SOLO con questo JSON valido:
+{"titolo":"sintesi rischio portafoglio","rischi":[{"nome":"nome rischio","severita":"ALTO/MEDIO/BASSO","descrizione":"descrizione con numeri specifici","mitigazione":"azione concreta"}],"rischio_principale":"il rischio piu' importante in 1 frase"}`,
+  };
+  return systemPrompt + (fullAnalysis[agent] || '');
+}
+
+async function runAgentAnalysis() {
+  if (AI_LOADING) return;
+  AI_LOADING = true;
+  const btn = document.getElementById('ai-analyze-btn');
+  if (btn) { btn.textContent = '⏳ Analisi in corso...'; btn.style.opacity='0.7'; btn.disabled=true; }
+  document.getElementById('ai-result-area').innerHTML =
+    '<div class="loading" style="height:30vh"><div class="spinner"></div><span style="margin-top:8px;color:var(--text3)">Analisi in corso...</span></div>';
+  const prompt = _buildPromptForAgent(AI_AGENT, null);
+  try {
+    const text = await _callClaudeProxy(prompt);
+    try {
+      const clean = text.replace(/```json|```/g,'').trim();
+      AI_RESULT = { type: 'structured', agent: AI_AGENT, data: JSON.parse(clean) };
+    } catch(e) {
+      AI_RESULT = { type: 'raw', agent: AI_AGENT, text };
+    }
+  } catch(e) {
+    AI_RESULT = { type: 'error', message: e.message };
+  }
+  AI_LOADING = false;
+  if (btn) { btn.textContent = ['🔍','📊','⚠️'][['analyst','pm','risk'].indexOf(AI_AGENT)] + ' Analisi completa'; btn.style.opacity='1'; btn.disabled=false; }
+  document.getElementById('ai-result-area').innerHTML = _renderAIResult(AI_RESULT);
+}
+
+async function runAgentQuestion() {
+  const input = document.getElementById('ai-question');
+  const question = (input ? input.value : '').trim();
+  if (!question || AI_LOADING) return;
+  AI_LOADING = true;
+  document.getElementById('ai-result-area').innerHTML =
+    '<div class="loading" style="height:20vh"><div class="spinner"></div></div>';
+  const prompt = _buildPromptForAgent(AI_AGENT, question);
+  try {
+    const text = await _callClaudeProxy(prompt);
+    AI_RESULT = { type: 'answer', agent: AI_AGENT, question, text };
+  } catch(e) {
+    AI_RESULT = { type: 'error', message: e.message };
+  }
+  AI_LOADING = false;
+  document.getElementById('ai-result-area').innerHTML = _renderAIResult(AI_RESULT);
+}
+
+function _renderAIResult(result) {
+  if (!result) return '<div class="empty">Nessun risultato</div>';
+  if (result.type === 'error') return `<div class="error-banner">Errore: ${result.message}</div>`;
+
+  const agentColors = { analyst:'var(--blue)', pm:'var(--green)', risk:'var(--amber)' };
+  const agentIcons = { analyst:'🔍', pm:'📊', risk:'⚠️' };
+  const agentNames = { analyst:'Market Analyst', pm:'Portfolio Manager', risk:'Risk Manager' };
+  const color = agentColors[result.agent] || 'var(--blue)';
+  const icon = agentIcons[result.agent] || '🤖';
+  const name = agentNames[result.agent] || 'AI';
+
+  if (result.type === 'answer') {
+    return `<div class="card" style="border-color:${color}33">
+      <div style="font-size:10px;color:${color};font-weight:700;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px">${icon} ${name}</div>
+      <div style="font-size:11px;color:var(--text3);font-style:italic;margin-bottom:10px;padding-bottom:10px;border-bottom:1px solid var(--border)">"${result.question}"</div>
+      <div style="font-size:13px;color:var(--text2);line-height:1.75">${(result.text||'').replace(/
+/g,'<br>')}</div>
+      <div style="font-size:10px;color:var(--text4);margin-top:12px">Claude Haiku · ${new Date().toLocaleTimeString('it-IT')}</div>
+    </div>`;
+  }
+
+  if (result.type === 'raw') {
+    return `<div class="card" style="border-color:${color}33">
+      <div style="font-size:10px;color:${color};font-weight:700;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:10px">${icon} ${name}</div>
+      <div style="font-size:13px;color:var(--text2);line-height:1.7">${(result.text||'').replace(/
+/g,'<br>')}</div>
+    </div>`;
+  }
+
+  if (result.type === 'structured') {
+    const d = result.data;
+    const agent = result.agent;
+
+    if (agent === 'analyst') {
+      const segnali = (d.segnali||[]).map((s,i) => {
+        const c = i===0?'var(--green)':i===1?'var(--red)':'var(--text3)';
+        const ic = i===0?'↑':i===1?'↓':'→';
+        return `<div style="display:flex;gap:8px;padding:7px 0;border-bottom:1px solid var(--border)">
+          <span style="color:${c};font-weight:700;flex-shrink:0">${ic}</span>
+          <span style="font-size:12px;color:var(--text2)">${s}</span>
+        </div>`;
+      }).join('');
+      return `<div class="card" style="border-color:rgba(64,144,255,0.2);margin-bottom:10px">
+        <div style="font-size:10px;color:var(--blue);font-weight:700;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px">🔍 ${d.titolo||'Market Analyst'}</div>
+        <div style="font-size:13px;color:var(--text2);line-height:1.7;margin-bottom:10px">${d.valutazione||''}</div>
+        ${segnali}
+      </div>
+      <div class="card" style="margin-bottom:10px">
+        <div style="font-size:10px;color:var(--green);font-weight:700;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px">📈 PAC questo mese</div>
+        <div style="font-size:13px;color:var(--text2)">${d.raccomandazione_pac||''}</div>
+      </div>
+      <div class="card">
+        <div style="font-size:10px;color:var(--amber);font-weight:700;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px">💰 Cash</div>
+        <div style="font-size:13px;color:var(--text2)">${d.raccomandazione_cash||''}</div>
+        <div style="font-size:10px;color:var(--text4);margin-top:10px">Claude Haiku · ${new Date().toLocaleTimeString('it-IT')} · Solo indicativo</div>
+      </div>`;
+    }
+
+    if (agent === 'pm') {
+      const azioni = (d.azioni||[]).map(a => {
+        const isBuy = (a.azione||'').toLowerCase().includes('compra');
+        const c = isBuy ? 'var(--green)' : 'var(--text3)';
+        return `<div style="display:flex;justify-content:space-between;align-items:flex-start;padding:10px 0;border-bottom:1px solid var(--border);gap:12px">
+          <div style="flex:1">
+            <div style="font-size:13px;font-weight:700;color:${c}">${a.azione||''} <span style="color:var(--text)">${a.strumento||''}</span></div>
+            <div style="font-size:11px;color:var(--text3);margin-top:2px">${a.motivazione||''}</div>
+          </div>
+          <div style="font-size:14px;font-weight:700;font-family:var(--mono);color:${c};flex-shrink:0">${a.importo||''}</div>
+        </div>`;
+      }).join('');
+      return `<div class="card" style="border-color:rgba(24,217,139,0.2);margin-bottom:10px">
+        <div style="font-size:10px;color:var(--green);font-weight:700;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px">📊 ${d.titolo||'Piano mensile'}</div>
+        <div style="font-size:13px;color:var(--text2);margin-bottom:12px">${d.sintesi||''}</div>
+        ${azioni}
+        ${d.note ? `<div style="font-size:11px;color:var(--text3);margin-top:10px;padding-top:10px;border-top:1px solid var(--border)">${d.note}</div>` : ''}
+        <div style="font-size:10px;color:var(--text4);margin-top:10px">Claude Haiku · ${new Date().toLocaleTimeString('it-IT')} · Solo indicativo</div>
+      </div>`;
+    }
+
+    if (agent === 'risk') {
+      const rischi = (d.rischi||[]).map(r => {
+        const c = r.severita==='ALTO'?'var(--red)':r.severita==='MEDIO'?'var(--amber)':'var(--text3)';
+        const bg = r.severita==='ALTO'?'rgba(255,77,106,0.1)':r.severita==='MEDIO'?'rgba(255,179,64,0.1)':'rgba(255,255,255,0.03)';
+        return `<div style="background:${bg};border-radius:var(--radius-xs);padding:12px;margin-bottom:8px">
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+            <span style="font-size:13px;font-weight:700;color:var(--text)">${r.nome||''}</span>
+            <span style="font-size:9px;font-weight:700;color:${c};background:${bg};padding:2px 8px;border-radius:20px;border:1px solid ${c}33">${r.severita||''}</span>
+          </div>
+          <div style="font-size:12px;color:var(--text2);margin-bottom:6px">${r.descrizione||''}</div>
+          <div style="font-size:11px;color:var(--green)">→ ${r.mitigazione||''}</div>
+        </div>`;
+      }).join('');
+      return `<div class="card" style="border-color:rgba(255,179,64,0.2);margin-bottom:10px">
+        <div style="font-size:10px;color:var(--amber);font-weight:700;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:8px">⚠️ Rischio principale</div>
+        <div style="font-size:13px;color:var(--text2)">${d.rischio_principale||''}</div>
+      </div>
+      <div class="card">
+        <div style="font-size:10px;color:var(--amber);font-weight:700;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:10px">⚠️ Mappa rischi</div>
+        ${rischi}
+        <div style="font-size:10px;color:var(--text4);margin-top:6px">Claude Haiku · ${new Date().toLocaleTimeString('it-IT')} · Solo indicativo</div>
+      </div>`;
+    }
+  }
+
+  return '<div class="empty">Formato non riconosciuto</div>';
 }
 
 function _buildPortfolioContext() {
@@ -1062,48 +1342,5 @@ async function _callClaudeProxy(prompt) {
   return data.text || '';
 }
 
-async function runAIAnalysis() {
-  if (AI_LOADING) return;
-  AI_LOADING = true;
-  const btn = document.getElementById('ai-analyze-btn');
-  if (btn) { btn.textContent = '⏳ Analisi in corso...'; btn.style.opacity='0.7'; btn.disabled=true; }
-  document.getElementById('ai-result-area').innerHTML = '<div class="loading" style="height:30vh"><div class="spinner"></div><span style="margin-top:8px;color:var(--text3)">Claude sta analizzando...</span></div>';
-  const prompt = `Sei un advisor finanziario esperto. Analizza questo portafoglio e rispondi SOLO con JSON valido, nessun testo fuori.\n\n${_buildPortfolioContext()}\n\nFormato (JSON puro):\n{"situazione":"2-3 frasi con numeri specifici","attenzione":["punto 1 con numeri","punto 2","punto 3"],"azioni":["azione 1 con €","azione 2 con €","azione 3"]}`;
-  try {
-    const text = await _callClaudeProxy(prompt);
-    try { AI_RESULT = { type:'analysis', data: JSON.parse(text.replace(/```json|```/g,'').trim()) }; }
-    catch(e) { AI_RESULT = { type:'raw', text }; }
-  } catch(e) { AI_RESULT = { type:'error', message: e.message }; }
-  AI_LOADING = false;
-  if (btn) { btn.textContent='✨ Analizza portafoglio'; btn.style.opacity='1'; btn.disabled=false; }
-  document.getElementById('ai-result-area').innerHTML = _renderAIResult(AI_RESULT);
-}
 
-async function runAIQuestion() {
-  const input = document.getElementById('ai-question');
-  const question = (input?input.value:'').trim();
-  if (!question || AI_LOADING) return;
-  AI_LOADING = true;
-  document.getElementById('ai-result-area').innerHTML = '<div class="loading" style="height:20vh"><div class="spinner"></div></div>';
-  const prompt = `Sei un advisor finanziario. Portafoglio:\n\n${_buildPortfolioContext()}\n\nDomanda: "${question}"\n\nRispondi diretto, con numeri reali, max 5 frasi.`;
-  try {
-    const text = await _callClaudeProxy(prompt);
-    AI_RESULT = { type:'answer', question, text };
-  } catch(e) { AI_RESULT = { type:'error', message: e.message }; }
-  AI_LOADING = false;
-  document.getElementById('ai-result-area').innerHTML = _renderAIResult(AI_RESULT);
-}
 
-function _renderAIResult(result) {
-  if (!result) return '<div class="empty">Nessun risultato</div>';
-  if (result.type==='error') return `<div class="error-banner">Errore: ${result.message}</div>`;
-  if (result.type==='answer') return `<div class="card" style="border-color:rgba(139,92,246,0.3)"><div style="font-size:10px;color:var(--violet);font-weight:700;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:10px">💬 ${result.question}</div><div style="font-size:13px;color:var(--text2);line-height:1.75">${(result.text||'').replace(/\n/g,'<br>')}</div><div style="font-size:10px;color:var(--text4);margin-top:12px">Claude Haiku · ${new Date().toLocaleTimeString('it-IT')}</div></div>`;
-  if (result.type==='raw') return `<div class="card"><div style="font-size:13px;color:var(--text2);line-height:1.7">${(result.text||'').replace(/\n/g,'<br>')}</div></div>`;
-  if (result.type==='analysis') {
-    const d = result.data;
-    const att = (d.attenzione||[]).map(a=>`<div style="display:flex;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)"><span style="color:var(--amber);font-size:15px;flex-shrink:0">⚠</span><span style="font-size:13px;color:var(--text2);line-height:1.55">${a}</span></div>`).join('');
-    const az = (d.azioni||[]).map((a,i)=>{const c=['var(--blue)','var(--green)','var(--violet)'][i%3];return `<div style="display:flex;gap:10px;padding:9px 0;border-bottom:1px solid var(--border)"><span style="color:${c};font-size:14px;font-weight:700;flex-shrink:0">${i+1}.</span><span style="font-size:13px;color:var(--text2);line-height:1.55">${a}</span></div>`;}).join('');
-    return `<div class="card" style="border-color:rgba(64,144,255,0.2);margin-bottom:10px"><div style="font-size:10px;color:var(--blue);font-weight:700;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:10px">📊 Situazione attuale</div><div style="font-size:13px;color:var(--text2);line-height:1.75">${d.situazione||''}</div></div><div class="card" style="border-color:rgba(255,179,64,0.2);margin-bottom:10px"><div style="font-size:10px;color:var(--amber);font-weight:700;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px">⚠️ Punti di attenzione</div>${att}</div><div class="card" style="border-color:rgba(24,217,139,0.2)"><div style="font-size:10px;color:var(--green);font-weight:700;text-transform:uppercase;letter-spacing:0.6px;margin-bottom:6px">🎯 Azioni suggerite</div>${az}<div style="font-size:10px;color:var(--text4);margin-top:12px">Claude Haiku · ${new Date().toLocaleTimeString('it-IT')} · Solo indicativo</div></div>`;
-  }
-  return '<div class="empty">Formato non riconosciuto</div>';
-}
