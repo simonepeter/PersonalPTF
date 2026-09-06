@@ -13,12 +13,13 @@ async function loadData() {
     const session = await checkSession();
     if (!session) { showLogin(); return; }
 
-    const [posRes, ovwRes, navRes, trxRes, catRes] = await Promise.all([
+    const [posRes, ovwRes, navRes, trxRes, catRes, assRes] = await Promise.all([
       sb.from('v_positions').select('*'),
       sb.from('v_overview').select('*').single(),
       sb.from('nav_history').select('*').order('nav_date', { ascending: true }),
       sb.from('transactions').select('*').order('operation_date', { ascending: false }).limit(50),
       sb.from('category_targets').select('*').is('valid_to', null),
+      sb.from('mandate').select('*'),
     ]);
 
     if (posRes.error) throw posRes.error;
@@ -29,6 +30,7 @@ async function loadData() {
     const navRows = navRes.data || [];
     const trxRows = trxRes.data || [];
     const targets = catRes.data || [];
+    const assetTargets = assRes.data || [];
 
     // ─── POSIZIONI ───
     const posizioni = positions.map(p => {
@@ -132,7 +134,29 @@ async function loadData() {
       };
     });
 
-    DATA = { overview, posizioni, performance, mandate, transactions };
+    // ─── MANDATE per asset class ───
+    const perAC = {};
+    posizioni.forEach(p => { perAC[p.ac] = (perAC[p.ac] || 0) + p.mv; });
+    const gestito = overview.navGestito || 0;
+    if (gestito > 0) perAC['Cash'] = (perAC['Cash'] || 0) + overview.cashTotale;
+
+    const mandateAC = assetTargets.map(t => {
+      const current = gestito > 0 ? (perAC[t.asset_class] || 0) / gestito : 0;
+      const target = Number(t.target_weight) / 100;
+      const min = Number(t.min_weight) / 100;
+      const max = Number(t.max_weight) / 100;
+      let status = 'OK';
+      if (current < min) status = 'SOTTO MIN';
+      else if (current > max) status = 'SOPRA MAX';
+      return { label: t.asset_class, current, target, min, max, status, drift: current - target };
+    }).sort((a, b) => b.target - a.target);
+
+    DATA = {
+      overview, posizioni, performance, transactions,
+      mandate: mandate.concat(mandateAC),
+      mandateCategorie: targets,
+      mandateAssetClass: assetTargets,
+    };
 
     const ultimo = navRows.length ? navRows[navRows.length - 1].nav_date : '';
     document.getElementById('update-time').textContent = ultimo || '--';
