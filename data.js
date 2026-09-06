@@ -80,8 +80,11 @@ async function loadData() {
         twr: navBase > 0 ? (nav - navBase) / navBase : 0,
         msci: benchBase > 0 && bench > 0 ? (bench - benchBase) / benchBase : null,
         sp: null,
-        patrimonio: null,
-        pctAzioni: null, pctEtf: null, pctCash: null, pctCrypto: null,
+        patrimonio: Number(r.patrimonio_totale) || null,
+        pctAzioni: r.pct_azioni != null ? Number(r.pct_azioni) : null,
+        pctEtf: r.pct_etf != null ? Number(r.pct_etf) : null,
+        pctCash: r.pct_cash != null ? Number(r.pct_cash) : null,
+        pctCrypto: r.pct_crypto != null ? Number(r.pct_crypto) : null,
       };
     });
 
