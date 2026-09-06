@@ -1,0 +1,91 @@
+-- ============================================================
+-- Asset non quotati (fondo pensione, TFR, immobili, liquidità)
+-- + movimenti + regole ricorrenti
+-- ============================================================
+
+-- ---------- 1. Anagrafica asset ----------
+create table public.assets (
+  id         uuid primary key default gen_random_uuid(),
+  user_id    uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  name       text not null,
+  asset_type text not null check (asset_type in
+               ('pension','tfr','real_estate','cash','insurance','other')),
+  is_managed boolean not null default false,  -- true = entra nel NAV gestito
+  currency   text not null default 'EUR',
+  note       text,
+  created_at timestamptz default now(),
+  unique (user_id, name)
+);
+
+-- ---------- 2. Regole ricorrenti ----------
+create table public.recurring_rules (
+  id            uuid primary key default gen_random_uuid(),
+  user_id       uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  asset_id      uuid not null references public.assets(id) on delete cascade,
+  amount_eur    numeric not null check (amount_eur <> 0),
+  frequency     text not null default 'monthly'
+                check (frequency in ('monthly','quarterly','yearly')),
+  day_of_month  integer not null default 1 check (day_of_month between 1 and 28),
+  start_date    date not null,
+  end_date      date,
+  last_run_date date,          -- fin dove il job ha già generato
+  active        boolean not null default true,
+  note          text,
+  created_at    timestamptz default now(),
+  check (end_date is null or end_date >= start_date)
+);
+
+-- ---------- 3. Movimenti ----------
+create table public.asset_movements (
+  id            uuid primary key default gen_random_uuid(),
+  user_id       uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  asset_id      uuid not null references public.assets(id) on delete cascade,
+  rule_id       uuid references public.recurring_rules(id) on delete set null,
+  movement_date date not null,
+  amount_eur    numeric not null,
+  kind          text not null default 'contribution'
+                check (kind in ('contribution','adjustment','withdrawal')),
+  note          text,
+  created_at    timestamptz default now()
+);
+
+create index asset_movements_asset_date
+  on public.asset_movements (asset_id, movement_date);
+
+-- evita doppioni se il job gira due volte per la stessa scadenza
+create unique index recurring_movement_unique
+  on public.asset_movements (rule_id, movement_date)
+  where rule_id is not null;
+
+-- ---------- 4. RLS ----------
+alter table public.assets          enable row level security;
+alter table public.recurring_rules enable row level security;
+alter table public.asset_movements enable row level security;
+
+create policy "own_assets" on public.assets
+  for all to authenticated
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create policy "own_recurring_rules" on public.recurring_rules
+  for all to authenticated
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+create policy "own_asset_movements" on public.asset_movements
+  for all to authenticated
+  using (auth.uid() = user_id) with check (auth.uid() = user_id);
+
+-- ---------- 5. Vista saldi ----------
+create or replace view public.v_asset_balances as
+select
+  a.user_id,
+  a.id                                   as asset_id,
+  a.name,
+  a.asset_type,
+  a.is_managed,
+  coalesce(sum(m.amount_eur), 0)         as balance_eur,
+  coalesce(sum(m.amount_eur) filter (where m.kind = 'contribution'), 0) as versato_eur,
+  coalesce(sum(m.amount_eur) filter (where m.kind = 'adjustment'), 0)   as rettifiche_eur,
+  max(m.movement_date)                   as ultimo_movimento
+from public.assets a
+left join public.asset_movements m on m.asset_id = a.id
+group by a.user_id, a.id, a.name, a.asset_type, a.is_managed;
