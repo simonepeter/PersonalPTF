@@ -158,11 +158,20 @@ export default async function handler(req, res) {
       if (upsertError) throw upsertError;
     }
 
+    let ricorrenti = { generati: 0 };
+    try {
+      ricorrenti = await runRecurringRules(supabase);
+    } catch (e) {
+      console.error('Regole ricorrenti:', e.message);
+      ricorrenti = { generati: 0, errore: e.message };
+    }
+
     return res.status(200).json({
       aggiornati: rows.length,
       falliti: errors.length,
       fx_eur_usd: fx,
       errori: errors,
+      ricorrenti,
     });
   } catch (e) {
     return res.status(500).json({ error: e.message });
