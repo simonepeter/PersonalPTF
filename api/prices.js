@@ -1,11 +1,15 @@
-// api/prices.js — aggiorna price_history da Yahoo Finance
+// api/prices.js — aggiorna price_history da Yahoo Finance,
+// genera i movimenti ricorrenti e registra lo snapshot NAV del giorno.
 // Girare su Vercel (cron giornaliero o chiamata manuale).
-// Env richieste: SUPABASE_URL, SUPABASE_SERVICE_KEY, CRON_SECRET
+// Env richieste: SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY, CRON_SECRET (opzionale)
 
 import { createClient } from '@supabase/supabase-js';
 
 const YAHOO = 'https://query1.finance.yahoo.com/v8/finance/chart/';
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36';
+
+// ISIN usato come benchmark nello storico NAV (iShares Core MSCI World)
+const BENCHMARK_ISIN = 'IE00B4L5Y983';
 
 async function fetchQuote(symbol) {
   const url = `${YAHOO}${encodeURIComponent(symbol)}?interval=1d&range=5d`;
@@ -98,6 +102,47 @@ async function runRecurringRules(supabase) {
   return { generati: movimenti.length };
 }
 
+// Registra lo snapshot NAV del giorno
+async function snapshotNav(supabase) {
+  const { data: rows, error } = await supabase
+    .from('v_overview')
+    .select('user_id, nav_gestito');
+
+  if (error) throw error;
+  if (!rows?.length) return { snapshot: 0 };
+
+  // benchmark: prezzo MSCI World appena salvato
+  let bench = null;
+  const { data: b } = await supabase
+    .from('price_history')
+    .select('price')
+    .eq('isin', BENCHMARK_ISIN)
+    .order('price_date', { ascending: false })
+    .limit(1);
+  if (b?.length) bench = b[0].price;
+
+  const oggi = new Date().toISOString().split('T')[0];
+
+  const snapshots = rows
+    .filter(r => r.user_id)
+    .map(r => ({
+      user_id: r.user_id,
+      nav_date: oggi,
+      nav_eur: r.nav_gestito,
+      benchmark_value: bench,
+      cash_flow: 0,
+    }));
+
+  if (!snapshots.length) return { snapshot: 0 };
+
+  // più esecuzioni nello stesso giorno sovrascrivono: vince l'ultima
+  const { error: upErr } = await supabase
+    .from('nav_history')
+    .upsert(snapshots, { onConflict: 'user_id,nav_date' });
+  if (upErr) throw upErr;
+
+  return { snapshot: snapshots.length, nav: snapshots[0].nav_eur };
+}
 
 export default async function handler(req, res) {
   // protezione: solo cron Vercel o chiamata con secret
@@ -166,12 +211,22 @@ export default async function handler(req, res) {
       ricorrenti = { generati: 0, errore: e.message };
     }
 
+    // dopo prezzi e movimenti, così il NAV riflette lo stato aggiornato
+    let nav = { snapshot: 0 };
+    try {
+      nav = await snapshotNav(supabase);
+    } catch (e) {
+      console.error('Snapshot NAV:', e.message);
+      nav = { snapshot: 0, errore: e.message };
+    }
+
     return res.status(200).json({
       aggiornati: rows.length,
       falliti: errors.length,
       fx_eur_usd: fx,
       errori: errors,
       ricorrenti,
+      nav,
     });
   } catch (e) {
     return res.status(500).json({ error: e.message });
