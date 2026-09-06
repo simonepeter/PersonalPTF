@@ -104,36 +104,55 @@ async function runRecurringRules(supabase) {
 
 // Registra lo snapshot NAV del giorno
 async function snapshotNav(supabase) {
-  const { data: rows, error } = await supabase
-    .from('v_overview')
-    .select('user_id, nav_gestito');
-
+  const { data: rows, error } = await supabase.from('v_overview').select('*');
   if (error) throw error;
   if (!rows?.length) return { snapshot: 0 };
 
-  // benchmark: prezzo MSCI World appena salvato
+  const { data: pos } = await supabase.from('v_positions').select('user_id, ac, mv');
+
   let bench = null;
   const { data: b } = await supabase
-    .from('price_history')
-    .select('price')
+    .from('price_history').select('price')
     .eq('isin', BENCHMARK_ISIN)
-    .order('price_date', { ascending: false })
-    .limit(1);
+    .order('price_date', { ascending: false }).limit(1);
   if (b?.length) bench = b[0].price;
 
   const oggi = new Date().toISOString().split('T')[0];
+  const AC = { ETF: 'ETF', ETC: 'ETF', STOCK: 'Azioni', CRYPTO: 'Crypto', FUND: 'Fondi' };
 
-  const snapshots = rows
-    .filter(r => r.user_id)
-    .map(r => ({
+  const snapshots = rows.filter(r => r.user_id).map(r => {
+    const mine = (pos || []).filter(p => p.user_id === r.user_id);
+    const gestito = Number(r.nav_gestito) || 0;
+    const per = {};
+    mine.forEach(p => {
+      const k = AC[p.ac] || p.ac;
+      per[k] = (per[k] || 0) + (Number(p.mv) || 0);
+    });
+    const cash = Number(r.cash_totale) || 0;
+    const q = v => (gestito > 0 ? (v || 0) / gestito : 0);
+
+    return {
       user_id: r.user_id,
       nav_date: oggi,
-      nav_eur: r.nav_gestito,
+      nav_eur: gestito,
       benchmark_value: bench,
       cash_flow: 0,
-    }));
+      patrimonio_totale: Number(r.nav_totale) || 0,
+      patrimonio_stabile: Number(r.nav_stabile) || 0,
+      cash_eur: cash,
+      pct_azioni: q(per['Azioni']),
+      pct_etf: q(per['ETF']),
+      pct_cash: q(cash),
+      pct_crypto: q(per['Crypto']),
+    };
+  });
 
-  if (!snapshots.length) return { snapshot: 0 };
+  const { error: upErr } = await supabase
+    .from('nav_history').upsert(snapshots, { onConflict: 'user_id,nav_date' });
+  if (upErr) throw upErr;
+
+  return { snapshot: snapshots.length, nav: snapshots[0].nav_eur };
+}
 
   // più esecuzioni nello stesso giorno sovrascrivono: vince l'ultima
   const { error: upErr } = await supabase
