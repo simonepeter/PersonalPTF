@@ -147,17 +147,10 @@ async function snapshotNav(supabase) {
     };
   });
 
+  if (!snapshots.length) return { snapshot: 0 };
+
   const { error: upErr } = await supabase
     .from('nav_history').upsert(snapshots, { onConflict: 'user_id,nav_date' });
-  if (upErr) throw upErr;
-
-  return { snapshot: snapshots.length, nav: snapshots[0].nav_eur };
-}
-
-  // più esecuzioni nello stesso giorno sovrascrivono: vince l'ultima
-  const { error: upErr } = await supabase
-    .from('nav_history')
-    .upsert(snapshots, { onConflict: 'user_id,nav_date' });
   if (upErr) throw upErr;
 
   return { snapshot: snapshots.length, nav: snapshots[0].nav_eur };
