@@ -184,19 +184,55 @@ function obNota(q, val) {
 
 // Form minusvalenze (F1b)
 function obFormMinus() {
-  const righe = (OB.minus || [{ anno: '', importo: '' }]).map((t, i) => `
-    <div class="ob-minus-row">
-      <input type="number" placeholder="Anno" value="${t.anno}"
-        onchange="obMinusSet(${i},'anno',this.value)">
-      <input type="number" placeholder="Importo €" value="${t.importo}"
-        onchange="obMinusSet(${i},'importo',this.value)">
-      <button class="ob-x" onclick="obMinusRimuovi(${i})">✕</button>
-    </div>`).join('');
+  const annoOggi = new Date().getFullYear();
+
+  const righe = (OB.minus || [{ anno: '', importo: '' }]).map((t, i) => {
+    const anno = parseInt(t.anno, 10);
+    const scadenza = (anno >= 2000 && anno <= annoOggi)
+      ? `<div class="ob-minus-info">Utilizzabile fino al 31 dicembre ${anno + 4}</div>`
+      : '';
+    return `
+    <div class="ob-minus-item">
+      <div class="ob-minus-row">
+        <input type="number" inputmode="numeric" placeholder="Anno"
+          min="2000" max="${annoOggi}" value="${t.anno}"
+          onchange="obMinusSet(${i},'anno',this.value)">
+        <input type="text" inputmode="decimal" placeholder="Importo, es. 1250.00"
+          value="${t.importo}"
+          onchange="obMinusSet(${i},'importo',this.value)">
+        <button class="ob-x" onclick="obMinusRimuovi(${i})" title="Rimuovi">✕</button>
+      </div>
+      ${scadenza}
+    </div>`;
+  }).join('');
 
   return `<div class="ob-minus">
     ${righe}
     <button class="ob-link ob-add" onclick="obMinusAggiungi()">+ Aggiungi una tranche</button>
+    <p class="ob-minus-hint">Anno in cui la minusvalenza si è formata, non quello di scadenza:
+      la calcoliamo noi. Importo in euro, con il punto per i decimali.</p>
   </div>`;
+}
+
+// Accetta sia 1.250,50 sia 1250.50 e restituisce un numero.
+function normalizzaImporto(raw) {
+  if (raw === null || raw === undefined) return NaN;
+  let s = String(raw).trim().replace(/[€\s]/g, '');
+  if (!s) return NaN;
+
+  const virgola = s.lastIndexOf(',');
+  const punto = s.lastIndexOf('.');
+
+  if (virgola > punto) {
+    // formato italiano: 1.250,50
+    s = s.replace(/\./g, '').replace(',', '.');
+  } else if (punto > virgola) {
+    // formato inglese: 1,250.50
+    s = s.replace(/,/g, '');
+  } else if (virgola >= 0) {
+    s = s.replace(',', '.');
+  }
+  return Number(s);
 }
 
 function obFine() {
@@ -292,7 +328,12 @@ async function obAvanti() {
     try {
       await saveAnswer(q.code, OB.answers[q.code], q.input_type);
       if (q.code === 'A3' && OB.answers.A3 === 'standard') await applyStandardMandate();
-      if (q.code === 'F1b' && OB.minus) await saveTaxCredits(OB.minus.filter(t => t.anno && t.importo));
+      if (q.code === 'F1b' && OB.minus) {
+        const valide = OB.minus
+          .map(t => ({ anno: parseInt(t.anno, 10), importo: normalizzaImporto(t.importo) }))
+          .filter(t => t.anno >= 2000 && isFinite(t.importo) && t.importo > 0);
+        await saveTaxCredits(valide);
+      }
     } catch (e) {
       console.error('Salvataggio risposta:', e.message || e);
     }
