@@ -166,11 +166,13 @@ async function applyStandardMandate() {
   const uid = sess?.session?.user?.id;
   if (!uid) throw new Error('Sessione assente');
 
+  // Allocazione di partenza convenzionale: ETF diversificati + riserva.
+  // Azioni singole e crypto restano a zero: si aggiungono come scelta esplicita.
   const standard = [
-    { asset_class: 'ETF',    target_weight: 55, min_weight: 40, max_weight: 75 },
-    { asset_class: 'Azioni', target_weight: 30, min_weight: 15, max_weight: 45 },
-    { asset_class: 'Cash',   target_weight: 12, min_weight: 5,  max_weight: 30 },
-    { asset_class: 'Crypto', target_weight: 3,  min_weight: 0,  max_weight: 10 },
+    { asset_class: 'ETF',    target_weight: 85, min_weight: 70, max_weight: 95 },
+    { asset_class: 'Cash',   target_weight: 15, min_weight: 5,  max_weight: 30 },
+    { asset_class: 'Azioni', target_weight: 0,  min_weight: 0,  max_weight: 20 },
+    { asset_class: 'Crypto', target_weight: 0,  min_weight: 0,  max_weight: 5  },
   ];
 
   const { error } = await sb
