@@ -1,0 +1,75 @@
+/* onboarding.css — stili della schermata di onboarding */
+
+.ob-screen{position:fixed;inset:0;z-index:9998;background:var(--bg);
+  display:flex;align-items:center;justify-content:center;overflow-y:auto}
+.ob-body{width:100%;max-width:360px;padding:26px 20px 30px;
+  min-height:100vh;display:flex;flex-direction:column}
+
+.ob-mark{width:42px;height:42px;border-radius:11px;
+  background:linear-gradient(135deg,var(--blue),var(--violet));
+  display:flex;align-items:center;justify-content:center;
+  font-weight:700;font-size:19px;color:#fff;margin-bottom:18px}
+
+.ob-lead{font-size:21px;font-weight:600;line-height:1.35;margin-bottom:10px;color:var(--text)}
+.ob-para{font-size:13.5px;color:var(--text3);line-height:1.65;margin-bottom:14px}
+.ob-small{font-size:12px;margin:0}
+
+.ob-cards{display:flex;flex-direction:column;gap:9px;margin-top:6px}
+.ob-card{padding:15px;background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-sm);cursor:pointer;transition:border-color .15s}
+.ob-card:hover{border-color:var(--border2)}
+.ob-card.pri{border-color:rgba(64,144,255,0.4);background:var(--blue-bg)}
+.ob-card b{display:block;font-size:14px;font-weight:600;margin-bottom:4px;color:var(--text)}
+.ob-card span{font-size:12px;color:var(--text3);line-height:1.5}
+.ob-meta{font-size:11px;color:var(--text4);font-family:var(--mono);margin-top:8px}
+
+.ob-prog{display:flex;gap:4px;margin-bottom:20px}
+.ob-seg{height:3px;flex:1;background:var(--surface3);border-radius:2px}
+.ob-seg.on{background:var(--blue)}
+.ob-seg.half{background:linear-gradient(90deg,var(--blue) 50%,var(--surface3) 50%)}
+
+.ob-step{font-size:11px;color:var(--text4);font-family:var(--mono);margin-bottom:14px}
+.ob-q{font-size:17px;font-weight:600;line-height:1.4;margin-bottom:8px;color:var(--text)}
+.ob-hint{font-size:12px;color:var(--text3);line-height:1.55;margin-bottom:18px}
+
+.ob-opts{display:flex;flex-direction:column;gap:8px}
+.ob-opt{padding:13px 14px;background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-sm);font-size:13.5px;color:var(--text2);
+  cursor:pointer;line-height:1.4;transition:border-color .15s}
+.ob-opt:hover{border-color:var(--border2)}
+.ob-opt.sel{background:var(--blue-bg);border-color:rgba(64,144,255,0.45);color:var(--text)}
+
+.ob-spacer{flex:1;min-height:16px}
+.ob-foot{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.ob-link{font-size:12.5px;color:var(--text3);cursor:pointer;background:none;
+  border:none;font-family:var(--font);padding:6px 0}
+.ob-link:hover{color:var(--text2)}
+.ob-btn{background:var(--blue);color:#fff;border:none;border-radius:var(--radius-xs);
+  padding:11px 22px;font-size:13.5px;font-weight:600;font-family:var(--font);cursor:pointer}
+.ob-btn:disabled{opacity:.35;cursor:default}
+
+.ob-pill{display:inline-block;font-size:10.5px;padding:3px 9px;border-radius:20px;
+  background:var(--surface3);color:var(--text3);margin-bottom:14px;align-self:flex-start}
+.ob-row{display:flex;justify-content:space-between;align-items:baseline;
+  padding:11px 0;border-bottom:1px solid var(--border);font-size:13px}
+.ob-row span{color:var(--text3)}
+.ob-row b{font-weight:600;font-family:var(--mono);font-size:13px;color:var(--text)}
+
+.ob-nota{background:rgba(255,179,64,0.08);border:1px solid rgba(255,179,64,0.25);
+  border-radius:var(--radius-sm);padding:13px;font-size:12.5px;
+  color:var(--text2);line-height:1.6;margin-top:16px}
+.ob-nota b{color:var(--amber);font-weight:600}
+
+.ob-warn{background:rgba(255,77,106,0.07);border:1px solid rgba(255,77,106,0.22);
+  border-radius:var(--radius-sm);padding:13px;font-size:12.5px;
+  color:var(--text2);line-height:1.6;margin-top:16px}
+.ob-warn b{color:var(--red);font-weight:600}
+
+.ob-minus{display:flex;flex-direction:column;gap:8px}
+.ob-minus-row{display:grid;grid-template-columns:1fr 1.3fr auto;gap:8px;align-items:center}
+.ob-minus-row input{background:var(--surface2);border:1px solid var(--border2);
+  border-radius:var(--radius-xs);color:var(--text);font-family:var(--mono);
+  font-size:13px;padding:9px 10px;outline:none;width:100%}
+.ob-x{background:none;border:none;color:var(--text4);font-size:14px;cursor:pointer;padding:4px}
+.ob-x:hover{color:var(--red)}
+.ob-add{align-self:flex-start;color:var(--blue);margin-top:2px}
