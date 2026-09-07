@@ -134,8 +134,7 @@ function obDomanda() {
     corpo = `<div class="ob-opts">${opts}</div>`;
   }
 
-  const rispostoQualcosa = val !== undefined && val !== null && val !== ''
-    && !(Array.isArray(val) && val.length === 0);
+  const stato = obStatoRisposta(q, val);
 
   const secondario = OB.fase === 'profile'
     ? `<button class="ob-link" onclick="obRimanda()">Riprendo dopo</button>`
@@ -152,13 +151,48 @@ function obDomanda() {
     ${corpo}
     ${obNota(q, val)}
     <div class="ob-spacer"></div>
+    ${stato.ok ? '' : `<p class="ob-blocco">${stato.motivo}</p>`}
     <div class="ob-foot">
       ${secondario}
-      <button class="ob-btn" ${rispostoQualcosa ? '' : 'disabled'} onclick="obAvanti()">
+      <button class="ob-btn" ${stato.ok ? '' : 'disabled'} onclick="obAvanti()">
         ${n === tot ? 'Concludi' : 'Avanti'}
       </button>
     </div>
   </div>`;
+}
+
+// Si può proseguire? E se no, perché.
+function obStatoRisposta(q, val) {
+  if (q.input_type === 'form' && q.code === 'F1b') {
+    const righe = (OB.minus || []).filter(t =>
+      String(t.anno).trim() !== '' || String(t.importo).trim() !== '');
+
+    if (!righe.length) {
+      return { ok: true };                    // nessuna riga: rimandabile
+    }
+
+    const annoOggi = new Date().getFullYear();
+    const incomplete = righe.filter(t =>
+      !(parseInt(t.anno, 10) >= 2000 && parseInt(t.anno, 10) <= annoOggi)
+      || !(normalizzaImporto(t.importo) > 0));
+
+    if (incomplete.length) {
+      return { ok: false,
+        motivo: `Completa anno e importo di ${incomplete.length === 1
+          ? 'una riga' : 'alcune righe'}, oppure rimuovile con la ✕.` };
+    }
+    return { ok: true };
+  }
+
+  if (q.input_type === 'multi') {
+    return Array.isArray(val) && val.length
+      ? { ok: true }
+      : { ok: false, motivo: 'Scegli almeno una voce.' };
+  }
+
+  return (val !== undefined && val !== null && val !== '')
+    ? { ok: true }
+    : { ok: false, motivo: 'Scegli una risposta per continuare.' };
 }
 
 // Nota contestuale che mostra l'effetto di una scelta (H2)
@@ -186,7 +220,8 @@ function obNota(q, val) {
 function obFormMinus() {
   const annoOggi = new Date().getFullYear();
 
-  const righe = (OB.minus || [{ anno: '', importo: '' }]).map((t, i) => {
+  const elenco = OB.minus && OB.minus.length ? OB.minus : [{ anno: '', importo: '' }];
+  const righe = elenco.map((t, i) => {
     const anno = parseInt(t.anno, 10);
     const scadenza = (anno >= 2000 && anno <= annoOggi)
       ? `<div class="ob-minus-info">Utilizzabile fino al 31 dicembre ${anno + 4}</div>`
