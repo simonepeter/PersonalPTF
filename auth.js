@@ -49,6 +49,15 @@ async function doLogin() {
   }
 
   hideLogin();
+  await avviaApp();
+}
+
+// Dopo il login: se manca il setup minimo parte l'onboarding, altrimenti i dati.
+async function avviaApp() {
+  if (typeof checkOnboarding === 'function') {
+    const pronto = await checkOnboarding();
+    if (!pronto) return;          // l'onboarding ha preso il controllo
+  }
   if (typeof loadData === 'function') loadData();
 }
 
@@ -67,5 +76,7 @@ window.addEventListener('DOMContentLoaded', () => {
 // Questo listener è registrato prima di quello di app.js, quindi gira per primo.
 window.addEventListener('DOMContentLoaded', async () => {
   const session = await checkSession();
-  if (!session) showLogin(); else hideLogin();
+  if (!session) { showLogin(); return; }
+  hideLogin();
+  await avviaApp();
 });
