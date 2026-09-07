@@ -179,29 +179,3 @@ async function saveSettings(kind) {
 
   SETTINGS_SAVING = false;
 }
-
-// ─── Aggiornamento prezzi on-demand ───
-async function refreshPrices(btn) {
-  if (!btn) btn = document.getElementById('refresh-prices-btn');
-  const testo = btn ? btn.textContent : '';
-  if (btn) { btn.disabled = true; btn.textContent = '⏳'; }
-
-  try {
-    const res = await fetch('/api/prices');
-    const d = await res.json();
-    if (d.error) throw new Error(d.error);
-
-    if (btn) btn.textContent = `✓ ${d.aggiornati}`;
-    await loadData();
-    setTimeout(() => {
-      if (btn) { btn.textContent = testo || '↻'; btn.disabled = false; }
-    }, 1500);
-
-  } catch (e) {
-    if (btn) btn.textContent = '✕';
-    console.error('Aggiornamento prezzi:', e.message || e);
-    setTimeout(() => {
-      if (btn) { btn.textContent = testo || '↻'; btn.disabled = false; }
-    }, 2000);
-  }
-}
