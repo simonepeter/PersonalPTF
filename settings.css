@@ -53,3 +53,26 @@
 .set-empty p{margin-bottom:16px}
 .set-btn{background:var(--blue);color:#fff;border:none;border-radius:var(--radius-xs);
   padding:10px 20px;font-size:13px;font-weight:600;font-family:var(--font);cursor:pointer}
+
+/* popup di modifica di una singola risposta */
+#edit-popup{position:fixed;inset:0;z-index:9997;display:flex;
+  align-items:flex-end;justify-content:center}
+.ep-back{position:absolute;inset:0;background:rgba(0,0,0,.55)}
+.ep-box{position:relative;width:100%;max-width:420px;background:var(--surface);
+  border:1px solid var(--border2);border-radius:16px 16px 0 0;
+  padding:20px 18px 22px;animation:epUp .18s ease}
+@keyframes epUp{from{transform:translateY(20px);opacity:0}to{transform:none;opacity:1}}
+.ep-q{font-size:15px;font-weight:600;line-height:1.4;margin-bottom:6px;color:var(--text)}
+.ep-hint{font-size:11.5px;color:var(--text3);line-height:1.55;margin-bottom:14px}
+.ep-opts{display:flex;flex-direction:column;gap:7px;max-height:46vh;overflow-y:auto}
+.ep-opt{padding:12px 13px;background:var(--surface2);border:1px solid var(--border);
+  border-radius:var(--radius-sm);font-size:13px;color:var(--text2);
+  cursor:pointer;line-height:1.4}
+.ep-opt:hover{border-color:var(--border2)}
+.ep-opt.sel{background:var(--blue-bg);border-color:rgba(64,144,255,.45);color:var(--text)}
+.ep-foot{display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:16px}
+.ep-link{background:none;border:none;color:var(--text3);font-size:12.5px;
+  cursor:pointer;font-family:var(--font);padding:8px 4px}
+.ep-btn{background:var(--blue);color:#fff;border:none;border-radius:var(--radius-xs);
+  padding:10px 20px;font-size:13px;font-weight:600;font-family:var(--font);cursor:pointer}
+.ep-btn:disabled{opacity:.35;cursor:default}
