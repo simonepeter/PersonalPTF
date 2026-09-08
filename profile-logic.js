@@ -96,8 +96,39 @@ function deriveProfile(answers, questions) {
     notify_when_idle:      g('G3') === 'yes',
   };
 
+  // Rischio di liquidità: il cuscinetto va letto insieme alla stabilità
+  // del reddito e alle spese in programma. Meno di 3 mesi con contratto
+  // stabile e nessuna spesa prevista non è la stessa cosa di meno di 3
+  // mesi con reddito variabile.
+  profile.liquidity_risk = deriveLiquidityRisk(answers);
+
   profile.completeness = computeCompleteness(answers, questions);
   return profile;
+}
+
+function deriveLiquidityRisk(answers) {
+  const mesi = BUFFER_MONTHS[answers.B1];
+  if (mesi === undefined || mesi === null) return null;
+
+  const redditoInstabile = answers.B4 === 'variable';
+  const spesaVicina = answers.B3 === 'lt2';
+  const spesaLontana = answers.B3 === 'gt2';
+
+  if (mesi >= 12) return 'low';
+
+  if (mesi < 3) {
+    if (redditoInstabile || spesaVicina) return 'high';
+    if (spesaLontana || answers.B4 === 'fairly') return 'medium';
+    return 'medium';                       // riserva sottile: mai 'low'
+  }
+
+  if (mesi < 6) {
+    if (redditoInstabile && spesaVicina) return 'high';
+    if (redditoInstabile || spesaVicina) return 'medium';
+    return 'low';
+  }
+
+  return (redditoInstabile && spesaVicina) ? 'medium' : 'low';
 }
 
 // Quota di domande di profilo visibili a cui è stata data risposta.
@@ -124,8 +155,16 @@ function computeCompleteness(answers, questions) {
 // portafoglio. Qui si compone il contesto completo.
 
 function buildRuleContext(profile, answers, portfolio = {}) {
+  // Flusso totale = PAC + versamenti previdenziali ricorrenti.
+  // Restano distinti: crescono con logiche diverse.
+  const pac = Number(profile.monthly_flow_eur) || 0;
+  const previdenza = Number(portfolio.pension_flow_eur) || 0;
+
   return {
     ...profile,
+    pac_flow_eur: pac,
+    pension_flow_eur: previdenza,
+    total_flow_eur: pac + previdenza,
     income_stability:          answers.B4 ?? null,
     sold_at_loss_before:       answers.C3 ?? null,
     check_frequency:           answers.C4 ?? null,
