@@ -33,7 +33,7 @@ async function checkOnboarding() {
 function startOnboarding(fase = 'intro') {
   OB.attivo = true;
   OB.fase = fase;
-  OB.indice = 0;
+  OB.indice = (fase === 'intro') ? 0 : primaSenzaRisposta(fase);
   document.getElementById('app').style.display = 'none';
   renderOnboarding();
 }
@@ -46,12 +46,29 @@ function endOnboarding() {
   loadData();
 }
 
-// Riprende il profilo dalla tab AI o dalle impostazioni
+// Riprende il profilo dalla prima domanda senza risposta.
 async function resumeProfile() {
   const stato = await onboardingStatus();
   OB.questions = stato.questions;
   OB.answers = stato.answers;
-  startOnboarding('profile');
+  OB.percorso = 'completo';
+  OB.attivo = true;
+  OB.fase = 'profile';
+  OB.indice = primaSenzaRisposta('profile');
+  document.getElementById('app').style.display = 'none';
+  renderOnboarding();
+}
+
+// Indice della prima domanda visibile ancora senza risposta.
+// Se sono tutte risposte, torna all'ultima.
+function primaSenzaRisposta(fase) {
+  const lista = visibleQuestions(OB.questions, OB.answers, fase);
+  const i = lista.findIndex(q => {
+    const a = OB.answers[q.code];
+    return a === undefined || a === null || a === ''
+      || (Array.isArray(a) && a.length === 0);
+  });
+  return i >= 0 ? i : Math.max(0, lista.length - 1);
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -325,7 +342,7 @@ function obNomeProfilo(p) {
 function obScegli(percorso) {
   OB.percorso = percorso;
   OB.fase = 'setup';
-  OB.indice = 0;
+  OB.indice = primaSenzaRisposta('setup');
   renderOnboarding();
 }
 
