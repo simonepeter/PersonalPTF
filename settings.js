@@ -1,195 +1,78 @@
-// settings.js — tab Impostazioni: modifica target categorie e asset class.
-// Va caricato DOPO data.js.
+/* settings.css — sezione impostazioni */
 
-let SETTINGS_DRAFT = null;
-let SETTINGS_SAVING = false;
+.set-area{font-size:11px;color:var(--text4);font-family:var(--mono);
+  margin:18px 0 8px;letter-spacing:.4px}
+.set-area:first-child{margin-top:0}
 
-// ─── Aggiunge la tab alla mappa di renderTab ───
-const _renderTabBase = renderTab;
-renderTab = function (tab) {
-  if (tab === 'settings') {
-    document.getElementById('page-content').innerHTML = settings();
-    return;
-  }
-  return _renderTabBase(tab);
-};
+.set-row{display:flex;align-items:center;gap:10px;padding:14px 15px;
+  background:var(--surface);border:1px solid var(--border);
+  border-radius:var(--radius-sm);margin-bottom:7px;cursor:pointer;
+  transition:border-color .15s}
+.set-row:hover{border-color:var(--border2)}
+.set-rw{flex:1;min-width:0}
+.set-rt{font-size:13.5px;font-weight:600;color:var(--text)}
+.set-rd{font-size:11.5px;color:var(--text3);margin-top:2px;line-height:1.45}
+.set-chev{margin-left:auto;color:var(--text4);font-size:14px;flex-shrink:0;opacity:.7}
 
-registraSezione('mandato', {
-  area: 'investimenti',
-  ordine: 1,
-  titolo: 'Mandato',
-  descrizione: 'Pesi target per categoria e asset class',
-  badge: () => {
-    const fuori = (DATA.mandate || []).filter(m => m.status !== 'OK');
-    if (!fuori.length) return null;
-    return { tipo: 'warn', testo: fuori.length === 1
-      ? `${fuori[0].label} fuori banda`
-      : `${fuori.length} voci fuori banda` };
-  },
-  render: () => _renderMandato(),
-});
+.set-tag{display:inline-block;font-size:10px;padding:2px 7px;
+  border-radius:4px;margin-top:5px}
+.set-tag.warn{background:rgba(255,179,64,.13);color:var(--amber)}
+.set-tag.ok{background:rgba(24,217,139,.13);color:var(--green)}
+.set-tag.info{background:var(--surface3);color:var(--text3)}
 
-function _renderMandato() {
+.set-back{font-size:12.5px;color:var(--text3);margin-bottom:14px;
+  cursor:pointer;padding:4px 0}
+.set-back:hover{color:var(--text2)}
+.set-h2{font-size:16px;font-weight:600;margin-bottom:3px;color:var(--text)}
+.set-h2d{font-size:12px;color:var(--text3);margin-bottom:16px;line-height:1.5}
 
-  const cat = (DATA.mandateCategorie || []);
-  const ass = (DATA.mandateAssetClass || []);
+.set-ans{display:flex;justify-content:space-between;align-items:center;
+  padding:12px 0;border-bottom:1px solid var(--border);gap:12px}
+.set-ans-l{flex:1;min-width:0}
+.set-ans-q{font-size:12px;color:var(--text3);margin-bottom:3px;line-height:1.4}
+.set-ans-v{font-size:13.5px;font-weight:500;color:var(--text);line-height:1.4}
+.set-ans-v.vuoto{color:var(--text4)}
+.set-ans-n{font-size:11px;margin-top:4px;line-height:1.45}
+.set-ans-n.ok{color:var(--green)}
+.set-ans-n.amb{color:var(--amber)}
+.set-ed{font-size:11.5px;color:var(--blue);cursor:pointer;flex-shrink:0;padding:4px}
 
-  const sommaCat = cat.reduce((s, r) => s + Number(r.target_weight || 0), 0);
-  const sommaAss = ass.reduce((s, r) => s + Number(r.target_weight || 0), 0);
+.set-more{width:100%;padding:12px;background:none;border:none;color:var(--blue);
+  font-size:12.5px;cursor:pointer;font-family:var(--font);margin-top:8px}
+.set-more:hover{color:var(--text)}
 
-  return setHeader('Mandato', 'Pesi target e bande di tolleranza') + `
-  <div class="card" style="margin-bottom:12px">
-    <div class="section-title">Target per categoria</div>
-    <div style="font-size:11px;color:var(--text3);margin-bottom:12px">
-      Vincolo primario: definisce il processo di investimento.
-    </div>
-    ${cat.map(r => _rowEditor('cat', r)).join('')}
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">
-      <span style="font-size:11px;color:${Math.abs(sommaCat - 100) < 0.01 ? 'var(--text3)' : 'var(--amber)'}">
-        Somma target: <b>${sommaCat.toFixed(0)}%</b>${Math.abs(sommaCat - 100) < 0.01 ? '' : ' — dovrebbe fare 100%'}
-      </span>
-      <button onclick="saveSettings('cat')" id="save-cat"
-        style="background:var(--blue-bg);color:var(--blue);border:1px solid rgba(64,144,255,0.3);border-radius:var(--radius-xs);padding:8px 16px;cursor:pointer;font-size:12px;font-weight:700;font-family:var(--font)">
-        Salva
-      </button>
-    </div>
-  </div>
+.set-note{background:rgba(64,144,255,.07);border:1px solid rgba(64,144,255,.2);
+  border-radius:var(--radius-xs);padding:12px 13px;font-size:11.5px;
+  color:var(--text3);line-height:1.6;margin-top:14px}
+.set-note b{color:var(--blue);font-weight:600}
+.set-link{background:none;border:none;color:var(--blue);font-size:11.5px;
+  cursor:pointer;font-family:var(--font);padding:0;margin-left:4px;
+  text-decoration:underline}
 
-  <div class="card">
-    <div class="section-title">Target per asset class</div>
-    <div style="font-size:11px;color:var(--text3);margin-bottom:12px">
-      Lettura descrittiva dell'esposizione: bande larghe, non un vincolo operativo.
-    </div>
-    ${ass.map(r => _rowEditor('ass', r)).join('')}
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px;padding-top:10px;border-top:1px solid var(--border)">
-      <span style="font-size:11px;color:${Math.abs(sommaAss - 100) < 0.01 ? 'var(--text3)' : 'var(--amber)'}">
-        Somma target: <b>${sommaAss.toFixed(0)}%</b>${Math.abs(sommaAss - 100) < 0.01 ? '' : ' — dovrebbe fare 100%'}
-      </span>
-      <button onclick="saveSettings('ass')" id="save-ass"
-        style="background:var(--blue-bg);color:var(--blue);border:1px solid rgba(64,144,255,0.3);border-radius:var(--radius-xs);padding:8px 16px;cursor:pointer;font-size:12px;font-weight:700;font-family:var(--font)">
-        Salva
-      </button>
-    </div>
-  </div>
+.set-empty{text-align:center;padding:40px 20px;color:var(--text3);font-size:13px}
+.set-empty p{margin-bottom:16px}
+.set-btn{background:var(--blue);color:#fff;border:none;border-radius:var(--radius-xs);
+  padding:10px 20px;font-size:13px;font-weight:600;font-family:var(--font);cursor:pointer}
 
-  <div style="font-size:10px;color:var(--text4);margin-top:14px;padding:0 4px">
-    Le modifiche ai target categoria vengono storicizzate: il valore precedente resta
-    consultabile con la sua data di validità.
-  </div>`;
-}
-
-function _rowEditor(kind, r) {
-  const key = kind === 'cat' ? r.category : r.asset_class;
-  const label = kind === 'cat'
-    ? ({ core: 'Core', satellite: 'Satellite', stocks: 'Stocks', speculative: 'Speculative' }[r.category] || r.category)
-    : r.asset_class;
-
-  const inp = (campo, val) => `
-    <input type="number" step="1" min="0" max="100"
-      id="set-${kind}-${key}-${campo}" value="${Number(val) || 0}"
-      style="width:100%;background:var(--surface2);border:1px solid var(--border2);border-radius:var(--radius-xs);
-             color:var(--text);font-family:var(--mono);font-size:13px;padding:7px 8px;outline:none;text-align:center">`;
-
-  return `
-  <div style="padding:12px 0;border-bottom:1px solid var(--border)">
-    <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:8px">${label}</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">
-      <div>
-        <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Min %</div>
-        ${inp('min', r.min_weight)}
-      </div>
-      <div>
-        <div style="font-size:9px;color:var(--blue);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Target %</div>
-        ${inp('target', r.target_weight)}
-      </div>
-      <div>
-        <div style="font-size:9px;color:var(--text3);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px">Max %</div>
-        ${inp('max', r.max_weight)}
-      </div>
-    </div>
-  </div>`;
-}
-
-function _readRow(kind, key) {
-  const g = campo => parseFloat(document.getElementById(`set-${kind}-${key}-${campo}`).value) || 0;
-  return { min: g('min'), target: g('target'), max: g('max') };
-}
-
-async function saveSettings(kind) {
-  if (SETTINGS_SAVING) return;
-
-  const rows = kind === 'cat' ? (DATA.mandateCategorie || []) : (DATA.mandateAssetClass || []);
-  const btn = document.getElementById(kind === 'cat' ? 'save-cat' : 'save-ass');
-
-  // validazione: banda coerente e somma target a 100
-  const letti = rows.map(r => {
-    const key = kind === 'cat' ? r.category : r.asset_class;
-    return { key, riga: r, ...(_readRow(kind, key)) };
-  });
-
-  for (const l of letti) {
-    if (l.min > l.target || l.target > l.max) {
-      btn.textContent = '✕ Banda incoerente';
-      setTimeout(() => { btn.textContent = 'Salva'; }, 2200);
-      return;
-    }
-  }
-
-  const somma = letti.reduce((s, l) => s + l.target, 0);
-  if (Math.abs(somma - 100) > 0.01) {
-    btn.textContent = `✕ Somma ${somma.toFixed(0)}%`;
-    setTimeout(() => { btn.textContent = 'Salva'; }, 2200);
-    return;
-  }
-
-  SETTINGS_SAVING = true;
-  btn.textContent = 'Salvataggio...';
-
-  try {
-    if (kind === 'cat') {
-      // storicizzazione: chiude la riga corrente e ne inserisce una nuova
-      for (const l of letti) {
-        const cambiato = l.min !== Number(l.riga.min_weight)
-          || l.target !== Number(l.riga.target_weight)
-          || l.max !== Number(l.riga.max_weight);
-        if (!cambiato) continue;
-
-        const { error: e1 } = await sb.from('category_targets')
-          .update({ valid_to: new Date().toISOString() })
-          .eq('id', l.riga.id);
-        if (e1) throw e1;
-
-        const { error: e2 } = await sb.from('category_targets').insert({
-          category: l.key,
-          target_weight: l.target,
-          min_weight: l.min,
-          max_weight: l.max,
-        });
-        if (e2) throw e2;
-      }
-    } else {
-      for (const l of letti) {
-        const { error } = await sb.from('mandate')
-          .update({
-            target_weight: l.target,
-            min_weight: l.min,
-            max_weight: l.max,
-            updated_at: new Date().toISOString(),
-          })
-          .eq('id', l.riga.id);
-        if (error) throw error;
-      }
-    }
-
-    btn.textContent = '✓ Salvato';
-    await loadData();
-    setTimeout(() => { renderTab('settings'); }, 400);
-
-  } catch (e) {
-    btn.textContent = '✕ Errore';
-    console.error('Salvataggio impostazioni:', e.message || e);
-    setTimeout(() => { btn.textContent = 'Salva'; }, 2200);
-  }
-
-  SETTINGS_SAVING = false;
-}
+/* popup di modifica di una singola risposta */
+#edit-popup{position:fixed;inset:0;z-index:9997;display:flex;
+  align-items:flex-end;justify-content:center}
+.ep-back{position:absolute;inset:0;background:rgba(0,0,0,.55)}
+.ep-box{position:relative;width:100%;max-width:420px;background:var(--surface);
+  border:1px solid var(--border2);border-radius:16px 16px 0 0;
+  padding:20px 18px 22px;animation:epUp .18s ease}
+@keyframes epUp{from{transform:translateY(20px);opacity:0}to{transform:none;opacity:1}}
+.ep-q{font-size:15px;font-weight:600;line-height:1.4;margin-bottom:6px;color:var(--text)}
+.ep-hint{font-size:11.5px;color:var(--text3);line-height:1.55;margin-bottom:14px}
+.ep-opts{display:flex;flex-direction:column;gap:7px;max-height:46vh;overflow-y:auto}
+.ep-opt{padding:12px 13px;background:var(--surface2);border:1px solid var(--border);
+  border-radius:var(--radius-sm);font-size:13px;color:var(--text2);
+  cursor:pointer;line-height:1.4}
+.ep-opt:hover{border-color:var(--border2)}
+.ep-opt.sel{background:var(--blue-bg);border-color:rgba(64,144,255,.45);color:var(--text)}
+.ep-foot{display:flex;justify-content:flex-end;align-items:center;gap:10px;margin-top:16px}
+.ep-link{background:none;border:none;color:var(--text3);font-size:12.5px;
+  cursor:pointer;font-family:var(--font);padding:8px 4px}
+.ep-btn{background:var(--blue);color:#fff;border:none;border-radius:var(--radius-xs);
+  padding:10px 20px;font-size:13px;font-weight:600;font-family:var(--font);cursor:pointer}
+.ep-btn:disabled{opacity:.35;cursor:default}
