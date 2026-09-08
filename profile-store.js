@@ -182,6 +182,20 @@ async function applyStandardMandate() {
   if (error) throw error;
 }
 
+// Minusvalenze già salvate, nel formato usato dal form.
+async function fetchTaxCredits() {
+  const { data, error } = await sb
+    .from('tax_credits')
+    .select('year_formed, amount_eur')
+    .order('year_formed');
+
+  if (error) throw error;
+  return (data || []).map(r => ({
+    anno: String(r.year_formed),
+    importo: String(r.amount_eur),
+  }));
+}
+
 // Stato dell'onboarding: cosa manca.
 async function onboardingStatus() {
   const [questions, answers, profile] = await Promise.all([
