@@ -52,6 +52,8 @@ async function resumeProfile() {
   OB.questions = stato.questions;
   OB.answers = stato.answers;
   OB.percorso = 'completo';
+  OB.minus = null;
+  OB.minusCaricate = false;
   OB.attivo = true;
   OB.fase = 'profile';
   OB.indice = primaSenzaRisposta('profile');
@@ -220,6 +222,14 @@ function obNota() { return ''; }
 // Form minusvalenze (F1b)
 function obFormMinus() {
   const annoOggi = new Date().getFullYear();
+
+  // prima apertura: recupera quelle già salvate
+  if (!OB.minus && !OB.minusCaricate) {
+    OB.minusCaricate = true;
+    fetchTaxCredits()
+      .then(t => { if (t.length) { OB.minus = t; renderOnboarding(); } })
+      .catch(e => console.error('Lettura minusvalenze:', e.message || e));
+  }
 
   const elenco = OB.minus && OB.minus.length ? OB.minus : [{ anno: '', importo: '' }];
   const righe = elenco.map((t, i) => {
