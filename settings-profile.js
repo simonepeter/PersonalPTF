@@ -153,23 +153,104 @@ function _notaDerivata(codice, p) {
   return null;
 }
 
-// Modifica di una singola risposta: riapre l'onboarding su quella domanda.
-async function modificaRisposta(codice) {
-  const stato = await onboardingStatus();
-  OB.questions = stato.questions;
-  OB.answers = stato.answers;
-  OB.percorso = 'completo';
-  OB.minus = null;
-  OB.minusCaricate = false;
-  OB.attivo = true;
-  OB.fase = 'profile';
-  OB.ritornoImpostazioni = true;
+// ═══════════════════════════════════════════════════════════
+// POPUP DI MODIFICA DI UNA SINGOLA RISPOSTA
+// ═══════════════════════════════════════════════════════════
 
-  const lista = visibleQuestions(OB.questions, OB.answers, 'profile');
-  const i = lista.findIndex(q => q.code === codice);
-  OB.indice = i >= 0 ? i : 0;
+let EDIT_CODICE = null;
+let EDIT_VALORE = null;
 
-  PROF_CACHE = null;                    // forza il ricaricamento al rientro
-  document.getElementById('app').style.display = 'none';
-  renderOnboarding();
+function modificaRisposta(codice) {
+  if (!PROF_CACHE) return;
+  const q = PROF_CACHE.questions.find(x => x.code === codice);
+  if (!q) return;
+
+  EDIT_CODICE = codice;
+  EDIT_VALORE = PROF_CACHE.answers[codice];
+  _mostraPopup(q);
+}
+
+function _mostraPopup(q) {
+  let el = document.getElementById('edit-popup');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'edit-popup';
+    document.body.appendChild(el);
+  }
+
+  const multi = q.input_type === 'multi';
+  const opzioni = (q.options || []).map(o => {
+    const sel = multi
+      ? Array.isArray(EDIT_VALORE) && EDIT_VALORE.includes(o.value)
+      : EDIT_VALORE === o.value;
+    return `<div class="ep-opt ${sel ? 'sel' : ''}"
+      onclick="_scegliValore('${o.value}', ${multi})">${o.label}</div>`;
+  }).join('');
+
+  const cambiato = multi
+    ? JSON.stringify(EDIT_VALORE || []) !== JSON.stringify(PROF_CACHE.answers[q.code] || [])
+    : EDIT_VALORE !== PROF_CACHE.answers[q.code];
+
+  el.innerHTML = `
+    <div class="ep-back" onclick="chiudiPopup()"></div>
+    <div class="ep-box">
+      <div class="ep-q">${q.text}</div>
+      ${q.hint ? `<div class="ep-hint">${q.hint}</div>` : ''}
+      <div class="ep-opts">${opzioni}</div>
+      <div class="ep-foot">
+        <button class="ep-link" onclick="chiudiPopup()">Annulla</button>
+        <button class="ep-btn" id="ep-salva" ${cambiato ? '' : 'disabled'}
+          onclick="salvaRisposta()">Salva</button>
+      </div>
+    </div>`;
+  el.classList.add('aperto');
+}
+
+function _scegliValore(valore, multi) {
+  if (multi) {
+    const attuale = Array.isArray(EDIT_VALORE) ? [...EDIT_VALORE] : [];
+    const i = attuale.indexOf(valore);
+    if (i >= 0) attuale.splice(i, 1); else attuale.push(valore);
+    EDIT_VALORE = attuale;
+  } else {
+    EDIT_VALORE = valore;
+  }
+  const q = PROF_CACHE.questions.find(x => x.code === EDIT_CODICE);
+  _mostraPopup(q);
+}
+
+function chiudiPopup() {
+  const el = document.getElementById('edit-popup');
+  if (el) el.remove();
+  EDIT_CODICE = null;
+  EDIT_VALORE = null;
+}
+
+async function salvaRisposta() {
+  const btn = document.getElementById('ep-salva');
+  if (!btn || btn.disabled) return;
+
+  const q = PROF_CACHE.questions.find(x => x.code === EDIT_CODICE);
+  btn.disabled = true;
+  btn.textContent = 'Salvo...';
+
+  try {
+    await saveAnswer(EDIT_CODICE, EDIT_VALORE, q.input_type, 'settings');
+
+    // ricalcola il profilo con la risposta aggiornata
+    const answers = await fetchAnswers();
+    const questions = PROF_CACHE.questions;
+    const profilo = deriveProfile(answers, questions);
+    await saveProfile(profilo, `Modifica di ${EDIT_CODICE} dalle impostazioni`);
+
+    PROF_CACHE = { questions, answers };
+    chiudiPopup();
+    await loadData();
+    renderTab('settings');
+
+  } catch (e) {
+    console.error('Salvataggio risposta:', e.message || e);
+    btn.disabled = false;
+    btn.textContent = 'Riprova';
+  }
 }
