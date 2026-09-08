@@ -13,13 +13,14 @@ async function loadData() {
     const session = await checkSession();
     if (!session) { showLogin(); return; }
 
-    const [posRes, ovwRes, navRes, trxRes, catRes, assRes] = await Promise.all([
+    const [posRes, ovwRes, navRes, trxRes, catRes, assRes, profRes] = await Promise.all([
       sb.from('v_positions').select('*'),
       sb.from('v_overview').select('*').single(),
       sb.from('nav_history').select('*').order('nav_date', { ascending: true }),
       sb.from('transactions').select('*').order('operation_date', { ascending: false }).limit(50),
       sb.from('category_targets').select('*').is('valid_to', null),
       sb.from('mandate').select('*'),
+      sb.from('investor_profile').select('*').is('valid_to', null).maybeSingle(),
     ]);
 
     if (posRes.error) throw posRes.error;
@@ -80,11 +81,8 @@ async function loadData() {
         twr: navBase > 0 ? (nav - navBase) / navBase : 0,
         msci: benchBase > 0 && bench > 0 ? (bench - benchBase) / benchBase : null,
         sp: null,
-        patrimonio: Number(r.patrimonio_totale) || null,
-        pctAzioni: r.pct_azioni != null ? Number(r.pct_azioni) : null,
-        pctEtf: r.pct_etf != null ? Number(r.pct_etf) : null,
-        pctCash: r.pct_cash != null ? Number(r.pct_cash) : null,
-        pctCrypto: r.pct_crypto != null ? Number(r.pct_crypto) : null,
+        patrimonio: null,
+        pctAzioni: null, pctEtf: null, pctCash: null, pctCrypto: null,
       };
     });
 
@@ -157,6 +155,7 @@ async function loadData() {
     DATA = {
       overview, posizioni, performance, transactions,
       mandate: mandate.concat(mandateAC),
+      profilo: profRes.data || null,
       mandateCategorie: targets,
       mandateAssetClass: assetTargets,
     };
