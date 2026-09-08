@@ -212,26 +212,10 @@ function obStatoRisposta(q, val) {
     : { ok: false, motivo: 'Scegli una risposta per continuare.' };
 }
 
-// Nota contestuale che mostra l'effetto di una scelta (H2)
-function obNota(q, val) {
-  if (q.code !== 'H2' || val !== 'part_of_wealth') return '';
-  const o = (DATA && DATA.overview) || {};
-  const gestito = o.navGestito || 0;
-  const stabile = o.navStabile || 0;
-  if (!gestito || !stabile) return '';
-
-  const azSolo = (DATA.posizioni || [])
-    .filter(p => p.ac === 'Azioni' || p.ac === 'ETF' || p.ac === 'Crypto')
-    .reduce((s, p) => s + p.mv, 0);
-  const pctSolo = Math.round(azSolo / gestito * 100);
-  const pctTot = Math.round(azSolo / (gestito + stabile) * 100);
-
-  return `<div class="ob-nota">
-    <b>Con questa scelta</b> la tua quota azionaria passa dal ${pctSolo}% al ${pctTot}%,
-    perché il calcolo include la previdenza. Tienilo presente: il TFR non è vendibile,
-    quindi non potrai usarlo per ribilanciare durante un crollo.
-  </div>`;
-}
+// Nota contestuale sotto una domanda.
+// La composizione della previdenza non si decide più qui: è una
+// proprietà del singolo asset, impostata al censimento.
+function obNota() { return ''; }
 
 // Form minusvalenze (F1b)
 function obFormMinus() {
