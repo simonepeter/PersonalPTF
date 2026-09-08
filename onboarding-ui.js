@@ -39,23 +39,10 @@ function startOnboarding(fase = 'intro') {
 }
 
 function endOnboarding() {
-  const tornaImpostazioni = OB.ritornoImpostazioni;
   OB.attivo = false;
-  OB.ritornoImpostazioni = false;
-
   const el = document.getElementById('onboarding-screen');
   if (el) el.remove();
   document.getElementById('app').style.display = '';
-
-  if (tornaImpostazioni) {
-    // rientro da una modifica singola: ricarica e torna alla sezione profilo
-    loadData().then(() => {
-      if (typeof SET_SEZIONE !== 'undefined') SET_SEZIONE = 'profilo-investitore';
-      if (typeof PROF_CACHE !== 'undefined') PROF_CACHE = null;
-      setTab('settings');
-    });
-    return;
-  }
   loadData();
 }
 
@@ -405,18 +392,6 @@ async function obAvanti() {
   if (OB.indice + 1 < nuova.length) {
     OB.indice++;
     renderOnboarding();
-    return;
-  }
-
-  // modifica di una singola risposta dalle impostazioni: si esce subito
-  if (OB.ritornoImpostazioni) {
-    OB.profiloCalcolato = deriveProfile(OB.answers, OB.questions);
-    try {
-      await saveProfile(OB.profiloCalcolato, 'Modifica dalle impostazioni');
-    } catch (e) {
-      console.error('Salvataggio profilo:', e.message || e);
-    }
-    endOnboarding();
     return;
   }
 
