@@ -37,4 +37,18 @@ t('espressione', L.evalRule('monthly_flow_eur * 12 > nav_gestito * 0.3', ctx), t
 t('campo nullo', L.evalRule('inesistente < 5', ctx), false);
 
 console.log(`\n${ok} superati, ${ko} falliti`);
-process.exit(ko ? 1 : 0);
+
+
+// --- liquidity_risk ---
+console.log('\n--- rischio liquidità ---');
+const lr = (b1,b4,b3) => L.deriveProfile({B1:b1,B4:b4,B3:b3}, []).liquidity_risk;
+let ok2=0, ko2=0;
+const t2=(n,a,b)=>{if(a===b){ok2++}else{ko2++;console.log('  FALLITO:',n,a,'≠',b)}};
+
+t2('sottile + stabile + no spese', lr('lt3','very','no'), 'medium');
+t2('sottile + variabile',          lr('lt3','variable','no'), 'high');
+t2('sottile + spesa vicina',       lr('lt3','very','lt2'), 'high');
+t2('medio + stabile',              lr('3_6','very','no'), 'low');
+t2('medio + variabile + spesa',    lr('3_6','variable','lt2'), 'high');
+t2('ampio',                        lr('gt12','variable','lt2'), 'low');
+console.log(`${ok2} superati, ${ko2} falliti`);
