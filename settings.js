@@ -14,10 +14,22 @@ renderTab = function (tab) {
   return _renderTabBase(tab);
 };
 
-function settings() {
-  if (!DATA) return '<div class="empty">Carica prima i dati.</div>';
+registraSezione('mandato', {
+  area: 'investimenti',
+  ordine: 1,
+  titolo: 'Mandato',
+  descrizione: 'Pesi target per categoria e asset class',
+  badge: () => {
+    const fuori = (DATA.mandate || []).filter(m => m.status !== 'OK');
+    if (!fuori.length) return null;
+    return { tipo: 'warn', testo: fuori.length === 1
+      ? `${fuori[0].label} fuori banda`
+      : `${fuori.length} voci fuori banda` };
+  },
+  render: () => _renderMandato(),
+});
 
-  const bannerProfilo = _bannerProfilo();
+function _renderMandato() {
 
   const cat = (DATA.mandateCategorie || []);
   const ass = (DATA.mandateAssetClass || []);
@@ -25,10 +37,9 @@ function settings() {
   const sommaCat = cat.reduce((s, r) => s + Number(r.target_weight || 0), 0);
   const sommaAss = ass.reduce((s, r) => s + Number(r.target_weight || 0), 0);
 
-  return `
-  ${bannerProfilo}
+  return setHeader('Mandato', 'Pesi target e bande di tolleranza') + `
   <div class="card" style="margin-bottom:12px">
-    <div class="section-title">⚙️ Target per categoria</div>
+    <div class="section-title">Target per categoria</div>
     <div style="font-size:11px;color:var(--text3);margin-bottom:12px">
       Vincolo primario: definisce il processo di investimento.
     </div>
@@ -45,7 +56,7 @@ function settings() {
   </div>
 
   <div class="card">
-    <div class="section-title">📊 Target per asset class</div>
+    <div class="section-title">Target per asset class</div>
     <div style="font-size:11px;color:var(--text3);margin-bottom:12px">
       Lettura descrittiva dell'esposizione: bande larghe, non un vincolo operativo.
     </div>
@@ -181,34 +192,4 @@ async function saveSettings(kind) {
   }
 
   SETTINGS_SAVING = false;
-}
-
-
-// ─── Banner di ripresa del profilo ───
-// Compare solo se il profilo non è completo.
-function _bannerProfilo() {
-  const p = DATA.profilo;
-  const perc = p ? Math.round(Number(p.completeness || 0) * 100) : 0;
-  if (p && perc >= 100) return '';
-
-  const testo = p
-    ? `Profilo completo al ${perc}%. Gli assistenti lavorano con meno contesto del necessario.`
-    : 'Non hai ancora definito il tuo profilo di investitore.';
-
-  return `<div class="card" style="margin-bottom:12px;border-color:rgba(64,144,255,0.28);background:var(--blue-bg)">
-    <div style="display:flex;align-items:center;gap:12px">
-      <div style="flex:1">
-        <div style="font-size:13px;font-weight:700;color:var(--text);margin-bottom:3px">
-          ${p ? 'Riprendi da dove eri' : 'Definisci il tuo profilo'}
-        </div>
-        <div style="font-size:11.5px;color:var(--text3);line-height:1.5">${testo}</div>
-      </div>
-      <button onclick="resumeProfile()"
-        style="background:var(--blue);color:#fff;border:none;border-radius:var(--radius-xs);
-               padding:9px 15px;font-size:12.5px;font-weight:600;font-family:var(--font);
-               cursor:pointer;flex-shrink:0">
-        ${p ? 'Riprendi' : 'Inizia'}
-      </button>
-    </div>
-  </div>`;
 }
