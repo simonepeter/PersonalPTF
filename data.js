@@ -64,6 +64,10 @@ async function loadData() {
       cashFineco: Number(o.cash_fineco) || 0,
       cashKraken: Number(o.cash_kraken) || 0,
       cashTotale: Number(o.cash_totale) || 0,
+      navAum: Number(o.nav_aum) || 0,
+      navOperativo: Number(o.nav_operativo) || 0,
+      equityEur: Number(o.equity_eur) || 0,
+      navNonMovimentabile: Number(o.nav_non_movimentabile) || 0,
     };
 
     // ─── PERFORMANCE ───
