@@ -15,9 +15,13 @@ async function checkSession() {
   const scadenza = (s.expires_at || 0) * 1000;
   if (scadenza - Date.now() > 120000) return s;      // valido per almeno 2 minuti
 
-  const { data: nuovo, error } = await sb.auth.refreshSession();
-  if (error || !nuovo.session) return null;
-  return nuovo.session;
+  try {
+    const { data: nuovo, error } = await sb.auth.refreshSession();
+    if (error || !nuovo.session) return null;
+    return nuovo.session;
+  } catch (e) {
+    return null;
+  }
 }
 
 // Se il token scade mentre l'app è aperta, si torna al login
