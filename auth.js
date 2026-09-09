@@ -8,8 +8,25 @@ const sb = window.supabase.createClient(SB_URL, SB_KEY);
 
 async function checkSession() {
   const { data } = await sb.auth.getSession();
-  return data.session || null;
+  const s = data.session;
+  if (!s) return null;
+
+  // getSession restituisce anche un token scaduto: va rinnovato
+  const scadenza = (s.expires_at || 0) * 1000;
+  if (scadenza - Date.now() > 120000) return s;      // valido per almeno 2 minuti
+
+  const { data: nuovo, error } = await sb.auth.refreshSession();
+  if (error || !nuovo.session) return null;
+  return nuovo.session;
 }
+
+// Se il token scade mentre l'app è aperta, si torna al login
+// invece di lasciare una schermata di errore.
+sb.auth.onAuthStateChange((evento, sessione) => {
+  if (evento === 'SIGNED_OUT' || (evento === 'TOKEN_REFRESHED' && !sessione)) {
+    showLogin();
+  }
+});
 
 function showLogin() {
   document.getElementById('login-screen').style.display = 'flex';
