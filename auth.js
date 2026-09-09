@@ -33,8 +33,9 @@ sb.auth.onAuthStateChange((evento, sessione) => {
 });
 
 function showLogin() {
-  document.getElementById('login-screen').style.display = 'flex';
   document.getElementById('app').style.display = 'none';
+  if (typeof renderAuth === 'function') renderAuth();
+  else document.getElementById('login-screen').style.display = 'flex';
 }
 
 function hideLogin() {
@@ -42,56 +43,10 @@ function hideLogin() {
   document.getElementById('app').style.display = '';
 }
 
-async function doLogin() {
-  const email = document.getElementById('login-email').value.trim();
-  const password = document.getElementById('login-password').value;
-  const btn = document.getElementById('login-btn');
-  const err = document.getElementById('login-error');
-
-  if (!email || !password) {
-    err.textContent = 'Inserisci email e password';
-    err.style.display = 'block';
-    return;
-  }
-
-  btn.disabled = true;
-  btn.textContent = 'Accesso...';
-  err.style.display = 'none';
-
-  const { error } = await sb.auth.signInWithPassword({ email, password });
-
-  btn.disabled = false;
-  btn.textContent = 'Accedi';
-
-  if (error) {
-    err.textContent = 'Credenziali non valide';
-    err.style.display = 'block';
-    return;
-  }
-
-  hideLogin();
-  await avviaApp();
-}
-
-// Dopo il login: se manca il setup minimo parte l'onboarding, altrimenti i dati.
-async function avviaApp() {
-  if (typeof checkOnboarding === 'function') {
-    const pronto = await checkOnboarding();
-    if (!pronto) return;          // l'onboarding ha preso il controllo
-  }
-  if (typeof loadData === 'function') loadData();
-}
-
 async function doLogout() {
   await sb.auth.signOut();
   showLogin();
 }
-
-// Invio con Enter dal campo password
-window.addEventListener('DOMContentLoaded', () => {
-  const pw = document.getElementById('login-password');
-  if (pw) pw.addEventListener('keydown', e => { if (e.key === 'Enter') doLogin(); });
-});
 
 // Controllo sessione all'avvio.
 // Questo listener è registrato prima di quello di app.js, quindi gira per primo.
