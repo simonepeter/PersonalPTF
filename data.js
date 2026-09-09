@@ -2,6 +2,8 @@
 // Va caricato DOPO app.js: la dichiarazione qui sovrascrive quella originale.
 
 // Mappa asset_class del DB → etichette usate dalla UI (AC_COLOR, donut, mandate)
+let _authRetry = false;
+
 const AC_MAP = { ETF: 'ETF', ETC: 'ETF', STOCK: 'Azioni', CRYPTO: 'Crypto', FUND: 'Fondi' };
 
 async function loadData() {
@@ -172,10 +174,16 @@ async function loadData() {
 
   } catch (e) {
     const msg = String(e.message || e);
-    if (/JWT|expired|not authenticated/i.test(msg)) {
-      const s = await checkSession();
-      if (!s) { showLogin(); return; }
-      return loadData();                    // riprova con il token rinnovato
+
+    // Sessione non valida: un solo tentativo di rinnovo, poi login.
+    if (/JWT|expired|not authenticated|401|Unauthorized/i.test(msg)) {
+      if (_authRetry) { _authRetry = false; showLogin(); return; }
+      _authRetry = true;
+      const { data, error } = await sb.auth.refreshSession();
+      if (error || !data.session) { _authRetry = false; showLogin(); return; }
+      const esito = await loadData();
+      _authRetry = false;
+      return esito;
     }
     document.getElementById('loading').innerHTML =
       `<div style="padding:20px;width:100%;max-width:360px">
