@@ -171,6 +171,12 @@ async function loadData() {
     renderTab(CURRENT_TAB);
 
   } catch (e) {
+    const msg = String(e.message || e);
+    if (/JWT|expired|not authenticated/i.test(msg)) {
+      const s = await checkSession();
+      if (!s) { showLogin(); return; }
+      return loadData();                    // riprova con il token rinnovato
+    }
     document.getElementById('loading').innerHTML =
       `<div style="padding:20px;width:100%;max-width:360px">
         <div style="font-size:12px;color:var(--text3);margin-bottom:8px">Errore connessione</div>
